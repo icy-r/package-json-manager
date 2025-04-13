@@ -207,69 +207,276 @@ export class DependencyGraphPanel {
   }
 
   private async generateDependencyGraphData(packageJson: any): Promise<any> {
-    // Extract dependencies
+    // Extract direct dependencies
     const dependencies = packageJson.dependencies || {};
     const devDependencies = packageJson.devDependencies || {};
 
-    // Create nodes for each dependency
-    const nodes = [
-      // Root node (current package)
-      {
-        id: packageJson.name || 'current-package',
-        name: packageJson.name || 'Current Package',
-        version: packageJson.version || '0.0.0',
-        type: 'root'
-      },
-      // Regular dependencies
-      ...Object.entries(dependencies).map(([name, version]) => ({
-        id: name,
-        name,
-        version: typeof version === 'string' ? version : 'Unknown',
-        type: 'dependency'
-      })),
-      // Dev dependencies
-      ...Object.entries(devDependencies).map(([name, version]) => ({
-        id: name,
-        name,
-        version: typeof version === 'string' ? version : 'Unknown',
-        type: 'devDependency'
-      }))
-    ];
+    // Get the directory of the package.json file
+    const packageJsonDir = path.dirname(this.packageJsonUri.fsPath);
+    const nodeModulesDir = path.join(packageJsonDir, "node_modules");
 
-    // Create links from root to each direct dependency
-    const links = [
-      // Links to regular dependencies
-      ...Object.keys(dependencies).map(name => ({
-        source: packageJson.name || 'current-package',
-        target: name,
-        type: 'dependency'
-      })),
-      // Links to dev dependencies
-      ...Object.keys(devDependencies).map(name => ({
-        source: packageJson.name || 'current-package',
-        target: name,
-        type: 'devDependency'
-      }))
-    ];
+    // Keep track of all nodes and edges
+    const nodes: any[] = [];
+    const links: any[] = [];
 
-    // In a real implementation, we would recursively resolve transitive dependencies
-    // by analyzing node_modules, but for this example we'll just use direct dependencies
+    // Keep track of processed packages to avoid circular dependencies
+    const processedPackages = new Set<string>();
+
+    // Add root node
+    const rootNodeId = packageJson.name || "current-package";
+    nodes.push({
+      id: rootNodeId,
+      name: packageJson.name || "Current Package",
+      version: packageJson.version || "0.0.0",
+      type: "root",
+    });
+
+    // Process dependencies recursively
+    await Promise.all([
+      this.processPackageDependencies(
+        dependencies,
+        "dependency",
+        rootNodeId,
+        nodeModulesDir,
+        nodes,
+        links,
+        processedPackages,
+        1 // Depth level
+      ),
+      this.processPackageDependencies(
+        devDependencies,
+        "devDependency",
+        rootNodeId,
+        nodeModulesDir,
+        nodes,
+        links,
+        processedPackages,
+        1 // Depth level
+      ),
+    ]);
 
     return { nodes, links };
   }
 
+  private async processPackageDependencies(
+    dependencies: Record<string, string>,
+    dependencyType: string,
+    sourceNodeId: string,
+    nodeModulesDir: string,
+    nodes: any[],
+    links: any[],
+    processedPackages: Set<string>,
+    depth: number,
+    maxDepth: number = 3  // Limit recursion depth to avoid performance issues
+  ): Promise<void> {
+    if (depth > maxDepth) {
+      return; // Stop recursion if max depth reached
+    }
+
+    await Promise.all(
+      Object.entries(dependencies).map(async ([name, version]) => {
+        // Create a unique ID based on the package name and source
+        const nodeId = name;
+
+        // Skip if we've already processed this package
+        if (processedPackages.has(nodeId)) {
+          // Just add a link if it doesn't exist yet
+          if (
+            !links.some(
+              (link) => link.source === sourceNodeId && link.target === nodeId
+            )
+          ) {
+            links.push({
+              source: sourceNodeId,
+              target: nodeId,
+              type: dependencyType,
+            });
+          }
+          return;
+        }
+
+        // Mark package as processed
+        processedPackages.add(nodeId);
+
+        // Add node
+        nodes.push({
+          id: nodeId,
+          name,
+          version: typeof version === "string" ? version : "Unknown",
+          type: dependencyType,
+        });
+
+        // Add link
+        links.push({
+          source: sourceNodeId,
+          target: nodeId,
+          type: dependencyType,
+        });
+
+        // Try to read the package's package.json to get its dependencies
+        try {
+          const packageDir = path.join(nodeModulesDir, name);
+          const packageJsonPath = path.join(packageDir, "package.json");
+
+          if (fs.existsSync(packageJsonPath)) {
+            const packageData = JSON.parse(
+              fs.readFileSync(packageJsonPath, "utf8")
+            );
+            const nestedDeps = packageData.dependencies || {};
+
+            // Recursively process nested dependencies
+            await this.processPackageDependencies(
+              nestedDeps,
+              "nestedDependency", // Mark these as nested dependencies
+              nodeId,
+              nodeModulesDir,
+              nodes,
+              links,
+              processedPackages,
+              depth + 1,
+              maxDepth
+            );
+          }
+        } catch (error) {
+          console.error(`Error processing dependencies for ${name}:`, error);
+        }
+      })
+    );
+  }
+
   private async getPackageDetails(packageName: string): Promise<any> {
-    // In a real implementation, this would fetch data from the npm registry
-    // For now, return mock data
-    return {
-      name: packageName,
-      description: 'Package description would be fetched from npm registry',
-      versions: ['1.0.0', '1.0.1', '1.1.0'],
-      author: 'Package Author',
-      license: 'MIT',
-      homepage: 'https://example.com',
-      repository: 'https://github.com/example/repo'
-    };
+    try {
+      // First check if we can find the package in node_modules
+      const packageJsonDir = path.dirname(this.packageJsonUri.fsPath);
+      const nodeModulesDir = path.join(packageJsonDir, "node_modules");
+      const packageDir = path.join(nodeModulesDir, packageName);
+      const packageJsonPath = path.join(packageDir, "package.json");
+
+      if (fs.existsSync(packageJsonPath)) {
+        // If the package exists locally, read its package.json
+        const packageData = JSON.parse(
+          fs.readFileSync(packageJsonPath, "utf8")
+        );
+        return {
+          name: packageData.name,
+          version: packageData.version,
+          description: packageData.description || "No description available",
+          author: this.formatAuthor(packageData.author),
+          license: packageData.license || "Unknown",
+          homepage: packageData.homepage || "",
+          repository: this.formatRepository(packageData.repository),
+          dependencies: Object.keys(packageData.dependencies || {}).length,
+          source: "local",
+        };
+      } else {
+        // If not found locally, fetch from npm registry
+        // Use the VS Code extension API to make HTTP requests
+        try {
+          const requestOptions: vscode.WebviewOptions = {
+            enableScripts: true,
+          };
+
+          // Fetch from npm registry
+          const response = await fetch(
+            `https://registry.npmjs.org/${packageName}`
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              `Failed to fetch package data: ${response.statusText}`
+            );
+          }
+
+          const data = await response.json();
+          const latestVersion = data["dist-tags"]?.latest;
+          const versionData = latestVersion
+            ? data.versions[latestVersion]
+            : null;
+
+          if (!versionData) {
+            throw new Error("Could not find latest version data");
+          }
+
+          return {
+            name: data.name,
+            version: latestVersion,
+            description: versionData.description || "No description available",
+            author: this.formatAuthor(versionData.author),
+            license: versionData.license || "Unknown",
+            homepage: versionData.homepage || data.homepage || "",
+            repository: this.formatRepository(
+              versionData.repository || data.repository
+            ),
+            dependencies: Object.keys(versionData.dependencies || {}).length,
+            maintainers: (data.maintainers || [])
+              .map((m: any) => m.name)
+              .join(", "),
+            downloads: "Available on npm",
+            source: "npm",
+          };
+        } catch (error) {
+          console.error(`Error fetching npm data for ${packageName}:`, error);
+          // Return basic info if npm fetch fails
+          return {
+            name: packageName,
+            description: "Could not fetch package details from npm registry",
+            version: "unknown",
+            source: "error",
+          };
+        }
+      }
+    } catch (error) {
+      console.error(`Error in getPackageDetails for ${packageName}:`, error);
+      return {
+        name: packageName,
+        description: "Error retrieving package details",
+        version: "unknown",
+        source: "error",
+      };
+    }
+  }
+  
+  private formatAuthor(author: any): string {
+    if (!author) {
+      return 'Unknown';
+    }
+    
+    if (typeof author === 'string') {
+      return author;
+    }
+    
+    if (typeof author === 'object') {
+      return author.name || 'Unknown';
+    }
+    
+    return 'Unknown';
+  }
+  
+  private formatRepository(repo: any): string {
+    if (!repo) {
+      return '';
+    }
+    
+    if (typeof repo === 'string') {
+      return repo;
+    }
+    
+    if (typeof repo === 'object') {
+      if (repo.url) {
+        // Clean up git URLs to make them clickable
+        let url = repo.url;
+        if (url.startsWith('git+')) {
+          url = url.substring(4);
+        }
+        if (url.endsWith('.git')) {
+          url = url.substring(0, url.length - 4);
+        }
+        return url;
+      }
+      return '';
+    }
+    
+    return '';
   }
 
   private getNonce(): string {

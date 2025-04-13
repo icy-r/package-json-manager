@@ -1,340 +1,515 @@
-// Get VS Code API
-const vscode = acquireVsCodeApi();
+// Global variables
+let svg;
+let simulation;
+let nodes = [];
+let links = [];
+let nodeElements;
+let linkElements;
+let selectedNode = null;
 
-// Initialize the graph when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  // Set up event listeners
+// Initialize graph visualization once DOM is loaded
+document.addEventListener("DOMContentLoaded", () => {
+  initGraph();
   setupEventListeners();
 
-  // Initialize the graph visualization
-  initializeGraph(graphData);
+  // Initialize with data from VSCode
+  if (typeof graphData !== "undefined") {
+    updateGraph(graphData);
+  }
 });
 
+// Set up VSCode webview communication
+const vscode = acquireVsCodeApi();
+
 // Handle messages from the extension
-window.addEventListener('message', event => {
+window.addEventListener("message", (event) => {
   const message = event.data;
 
   switch (message.command) {
-    case 'packageDetails':
-      // Show package details panel
-      showPackageDetails(message.packageName, message.details);
+    case "packageDetails":
+      showPackageInfo(message.details, message.packageName);
+      break;
+
+    case "updateGraph":
+      updateGraph(message.data);
       break;
   }
 });
 
+// Initialize the SVG and force simulation
+function initGraph() {
+  const width = window.innerWidth;
+  const height = window.innerHeight - 100; // Account for header
+
+  // Create SVG container
+  svg = d3
+    .select("#graph-container")
+    .append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("viewBox", [0, 0, width, height])
+    .call(
+      d3.zoom().on("zoom", (event) => {
+        container.attr("transform", event.transform);
+      })
+    );
+
+  // Add defs for arrow markers
+  const defs = svg.append("defs");
+
+  // Add arrow marker for dependencies
+  defs
+    .append("marker")
+    .attr("id", "arrow-dependency")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 20)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#4CAF50");
+
+  // Add arrow marker for devDependencies
+  defs
+    .append("marker")
+    .attr("id", "arrow-devDependency")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 20)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#2196F3");
+
+  // Add arrow marker for nested dependencies
+  defs
+    .append("marker")
+    .attr("id", "arrow-nestedDependency")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 20)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#9E9E9E");
+
+  // Create a container group for the graph
+  const container = svg.append("g");
+
+  // Create groups for graph elements
+  container.append("g").attr("class", "links");
+
+  container.append("g").attr("class", "nodes");
+
+  // Create force simulation
+  simulation = d3
+    .forceSimulation()
+    .force(
+      "link",
+      d3
+        .forceLink()
+        .id((d) => d.id)
+        .distance(100)
+    )
+    .force("charge", d3.forceManyBody().strength(-300))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collision", d3.forceCollide().radius(40))
+    .on("tick", ticked);
+}
+
 // Set up event listeners
 function setupEventListeners() {
   // Refresh button
-  document.getElementById('btn-refresh').addEventListener('click', () => {
-    vscode.postMessage({ command: 'refresh' });
+  document.getElementById("btn-refresh").addEventListener("click", () => {
+    vscode.postMessage({
+      command: "refresh",
+    });
   });
 
-  // Dependency type filter
-  document.getElementById('dependency-type').addEventListener('change', (e) => {
-    filterDependenciesByType(e.target.value);
+  // Filter dropdown
+  document.getElementById("dependency-type").addEventListener("change", (e) => {
+    filterDependencies(e.target.value);
   });
 
   // Search input
-  document.getElementById('search-input').addEventListener('input', (e) => {
-    searchPackages(e.target.value);
+  document.getElementById("search-input").addEventListener("input", (e) => {
+    searchNodes(e.target.value);
   });
 
   // Package info close button
-  document.getElementById('package-info-close').addEventListener('click', () => {
-    hidePackageInfo();
+  document
+    .getElementById("package-info-close")
+    .addEventListener("click", () => {
+      hidePackageInfo();
+    });
+
+  // Handle window resize
+  window.addEventListener("resize", () => {
+    resizeGraph();
   });
 }
 
-// Initialize D3.js graph visualization
-function initializeGraph(data) {
-  try {
-    console.log('Initializing graph with data:', data);
+// Update the graph with new data
+function updateGraph(data) {
+  // Clear existing graph elements
+  d3.select(".nodes").selectAll("*").remove();
+  d3.select(".links").selectAll("*").remove();
 
-    // Check if data is valid
-    if (!data || !data.nodes || !data.links) {
-      console.error('Invalid graph data:', data);
-      document.querySelector('.graph-loading').textContent = 'Error: Invalid graph data';
-      return;
-    }
+  // Update data
+  nodes = data.nodes;
+  links = data.links;
 
-    // Hide loading indicator
-    document.querySelector('.graph-loading').classList.add('hidden');
-
-    // Create an SVG element for the graph
-    const graphContainer = document.getElementById('graph-container');
-    const svg = d3.select(graphContainer)
-      .append('svg')
-      .attr('class', 'graph')
-      .attr('width', '100%')
-      .attr('height', '100%');
-
-    // Create a container group for the graph
-    const g = svg.append('g');
-
-    // Add zoom behavior
-    const zoom = d3.zoom()
-      .scaleExtent([0.1, 3])
-      .on('zoom', (event) => {
-        g.attr('transform', event.transform);
-      });
-
-    svg.call(zoom);
-
-    // Add a defs section for markers
-    const defs = svg.append('defs');
-
-    // Add arrow marker for links
-    defs.append('marker')
-      .attr('id', 'arrowhead')
-      .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 20)
-      .attr('refY', 0)
-      .attr('orient', 'auto')
-      .attr('markerWidth', 6)
-      .attr('markerHeight', 6)
-      .append('path')
-      .attr('d', 'M0,-5L10,0L0,5')
-      .attr('fill', 'var(--vscode-editor-foreground)');
-
-  // Create a force simulation for the graph layout
-  const simulation = d3.forceSimulation(data.nodes)
-    .force('link', d3.forceLink(data.links).id(d => d.id).distance(100))
-    .force('charge', d3.forceManyBody().strength(-300))
-    .force('center', d3.forceCenter(graphContainer.offsetWidth / 2, graphContainer.offsetHeight / 2))
-    .force('collide', d3.forceCollide().radius(50));
-
-  console.log('Force simulation created with nodes:', data.nodes.length, 'links:', data.links.length);
-
-  // Create links (edges)
-  const links = g.append('g')
-    .selectAll('line')
-    .data(data.links)
+  // Create links
+  linkElements = d3
+    .select(".links")
+    .selectAll("line")
+    .data(links)
     .enter()
-    .append('line')
-    .attr('class', d => `link ${d.type || ''}`)
-    .attr('marker-end', 'url(#arrowhead)');
+    .append("line")
+    .attr("class", (d) => `link ${d.type}`)
+    .attr("stroke", (d) => getLinkColor(d.type))
+    .attr("stroke-width", 2)
+    .attr("marker-end", (d) => `url(#arrow-${d.type})`);
 
   // Create nodes
-  const nodes = g.append('g')
-    .selectAll('.node')
-    .data(data.nodes)
+  const nodeGroups = d3
+    .select(".nodes")
+    .selectAll("g")
+    .data(nodes)
     .enter()
-    .append('g')
-    .attr('class', d => `node ${d.type || ''}`)
-    .call(d3.drag()
-      .on('start', dragstarted)
-      .on('drag', dragged)
-      .on('end', dragended))
-    .on('click', nodeClicked);
+    .append("g")
+    .attr("class", (d) => `node ${d.type}`)
+    .call(
+      d3
+        .drag()
+        .on("start", dragStarted)
+        .on("drag", dragged)
+        .on("end", dragEnded)
+    )
+    .on("click", nodeClicked);
 
-  // Add circles to nodes
-  nodes.append('circle')
-    .attr('r', d => d.type === 'root' ? 25 : 15);
+  // Node circles
+  nodeGroups
+    .append("circle")
+    .attr("r", (d) => (d.type === "root" ? 30 : 20))
+    .attr("fill", (d) => getNodeColor(d.type));
 
-  // Add labels to nodes
-  nodes.append('text')
-    .attr('class', 'node-label')
-    .text(d => d.name);
+  // Node labels
+  nodeGroups
+    .append("text")
+    .attr("dy", ".35em")
+    .attr("text-anchor", "middle")
+    .attr("font-size", "10px")
+    .attr("fill", "#fff")
+    .text((d) => shortenText(d.name, 18));
 
-  // Add controls for zoom
-  const controls = d3.select(graphContainer)
-    .append('div')
-    .attr('class', 'controls');
+  // Update node elements reference
+  nodeElements = nodeGroups;
 
-  const zoomControl = controls.append('div')
-    .attr('class', 'zoom-control');
+  // Update simulation
+  simulation.nodes(nodes);
+  simulation.force("link").links(links);
+  simulation.alpha(1).restart();
 
-  zoomControl.append('button')
-    .text('+')
-    .on('click', () => {
-      svg.transition().duration(500).call(zoom.scaleBy, 1.5);
-    });
-
-  zoomControl.append('button')
-    .text('-')
-    .on('click', () => {
-      svg.transition().duration(500).call(zoom.scaleBy, 0.75);
-    });
-
-  zoomControl.append('button')
-    .text('Reset')
-    .on('click', () => {
-      svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
-    });
-
-  // Update the positions on each tick of the simulation
-  simulation.on('tick', () => {
-    links
-      .attr('x1', d => d.source.x)
-      .attr('y1', d => d.source.y)
-      .attr('x2', d => d.target.x)
-      .attr('y2', d => d.target.y);
-
-    nodes
-      .attr('transform', d => `translate(${d.x}, ${d.y})`);
-  });
-
-  // Add a slight initial zoom out to show the whole graph
-  svg.transition().duration(750).call(
-    zoom.transform,
-    d3.zoomIdentity.translate(graphContainer.offsetWidth / 2, graphContainer.offsetHeight / 2).scale(0.8)
-  );
-
-  // Drag functions for nodes
-  function dragstarted(event, d) {
-    if (!event.active) simulation.alphaTarget(0.3).restart();
-    d.fx = d.x;
-    d.fy = d.y;
-  }
-
-  function dragged(event, d) {
-    d.fx = event.x;
-    d.fy = event.y;
-  }
-
-  function dragended(event, d) {
-    if (!event.active) simulation.alphaTarget(0);
-    // Keep the node fixed at its new position
-    // d.fx = null;
-    // d.fy = null;
-  }
-
-  // Handle node click events
-  function nodeClicked(event, d) {
-    // Don't follow click if it's the end of a drag
-    if (event.defaultPrevented) return;
-
-    // Highlight node and connected links
-    highlightNode(d);
-
-    // Show package details
-    if (d.type !== 'root') {
-      requestPackageDetails(d.name);
-    }
-  }
-
-  // Highlight a node and its connections
-  function highlightNode(node) {
-    // First reset all highlights
-    nodes.classed('highlighted', false);
-    links.classed('highlighted', false);
-
-    // Highlight the selected node
-    nodes.filter(d => d.id === node.id).classed('highlighted', true);
-
-    // Highlight direct links to/from this node
-    links.filter(d => d.source.id === node.id || d.target.id === node.id)
-      .classed('highlighted', true);
-
-    // Highlight connected nodes
-    nodes.filter(d => {
-      return data.links.some(link =>
-        (link.source.id === node.id && link.target.id === d.id) ||
-        (link.target.id === node.id && link.source.id === d.id)
-      );
-    }).classed('highlighted', true);
-  }
-
-  } catch (error) {
-    console.error('Error initializing graph:', error);
-    document.querySelector('.graph-loading').classList.remove('hidden');
-    document.querySelector('.graph-loading').innerHTML = `<p>Error initializing graph: ${error.message}</p>`;
-  }
+  // Remove loading message
+  document.querySelector(".graph-loading").style.display = "none";
 }
 
-// Filter dependencies by type (all, dependencies, devDependencies)
-function filterDependenciesByType(type) {
-  const nodes = d3.selectAll('.node');
-  const links = d3.selectAll('.link');
+// Ticker function for updating positions on each simulation tick
+function ticked() {
+  if (!linkElements || !nodeElements) return;
 
-  if (type === 'all') {
-    // Show all nodes and links
-    nodes.style('display', null);
-    links.style('display', null);
-  } else {
-    // Hide nodes and links that don't match the type
-    nodes.style('display', d => d.type === 'root' || d.type === type ? null : 'none');
-    links.style('display', d => d.type === type ? null : 'none');
-  }
+  linkElements
+    .attr("x1", (d) => d.source.x)
+    .attr("y1", (d) => d.source.y)
+    .attr("x2", (d) => d.target.x)
+    .attr("y2", (d) => d.target.y);
+
+  nodeElements.attr("transform", (d) => `translate(${d.x}, ${d.y})`);
 }
 
-// Search for packages by name
-function searchPackages(query) {
-  if (!query) {
-    // If query is empty, show all nodes
-    d3.selectAll('.node').style('display', null);
-    d3.selectAll('.link').style('display', null);
-    return;
-  }
-
-  const lowerQuery = query.toLowerCase();
-  const matchingNodes = [];
-
-  // Find matching nodes
-  d3.selectAll('.node').each(function(d) {
-    const match = d.name.toLowerCase().includes(lowerQuery);
-    d3.select(this).style('display', match ? null : 'none');
-    if (match) {
-      matchingNodes.push(d.id);
-    }
-  });
-
-  // Show links connected to matching nodes
-  d3.selectAll('.link').style('display', function(d) {
-    return matchingNodes.includes(d.source.id) || matchingNodes.includes(d.target.id)
-      ? null
-      : 'none';
-  });
+// Handle node drag events
+function dragStarted(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x;
+  d.fy = d.y;
 }
 
-// Request package details from the extension
-function requestPackageDetails(packageName) {
+function dragged(event, d) {
+  d.fx = event.x;
+  d.fy = event.y;
+}
+
+function dragEnded(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null;
+  d.fy = null;
+}
+
+// Handle node click to show package details
+function nodeClicked(event, d) {
+  event.stopPropagation();
+
+  // Clear previous selection
+  if (selectedNode) {
+    d3.select(selectedNode)
+      .select("circle")
+      .attr("stroke", null)
+      .attr("stroke-width", 0);
+  }
+
+  // Highlight selected node
+  selectedNode = this;
+  d3.select(this)
+    .select("circle")
+    .attr("stroke", "#FFD700")
+    .attr("stroke-width", 3);
+
+  // Show package info panel with loading indicator
+  showPackageInfoLoading(d.name);
+
+  // Request package details from extension
   vscode.postMessage({
-    command: 'getPackageDetails',
-    packageName
+    command: "getPackageDetails",
+    packageName: d.name,
   });
 }
 
-// Show package details in the panel
-function showPackageDetails(packageName, details) {
-  const packageInfo = document.getElementById('package-info');
-  const packageInfoName = document.getElementById('package-info-name');
-  const packageInfoContent = document.getElementById('package-info-content');
+// Show package info panel with loading state
+function showPackageInfoLoading(packageName) {
+  const infoPanel = document.getElementById("package-info");
+  const nameElement = document.getElementById("package-info-name");
+  const contentElement = document.getElementById("package-info-content");
 
-  // Set the package name
-  packageInfoName.textContent = packageName;
+  nameElement.textContent = packageName;
+  contentElement.innerHTML =
+    '<div class="loading">Loading package information...</div>';
 
-  // Populate the content
-  packageInfoContent.innerHTML = `
-    <dl>
-      <dt>Description</dt>
-      <dd>${details.description || 'No description available'}</dd>
+  infoPanel.classList.remove("hidden");
+}
 
-      <dt>Current Version</dt>
-      <dd>${details.version || 'Unknown'}</dd>
+// Show package info panel with data
+function showPackageInfo(details, packageName) {
+  const contentElement = document.getElementById("package-info-content");
 
-      <dt>Available Versions</dt>
-      <dd>${details.versions ? details.versions.join(', ') : 'Unknown'}</dd>
-
-      <dt>Author</dt>
-      <dd>${details.author || 'Unknown'}</dd>
-
-      <dt>License</dt>
-      <dd>${details.license || 'Unknown'}</dd>
-
-      <dt>Homepage</dt>
-      <dd>${details.homepage || 'Not specified'}</dd>
-
-      <dt>Repository</dt>
-      <dd>${details.repository || 'Not specified'}</dd>
-    </dl>
+  let html = `
+    <div class="package-detail">
+      <span class="detail-label">Version:</span>
+      <span class="detail-value">${details.version || "Unknown"}</span>
+    </div>
+    <div class="package-detail">
+      <span class="detail-label">Description:</span>
+      <span class="detail-value">${
+        details.description || "No description available"
+      }</span>
+    </div>
   `;
 
-  // Show the panel
-  packageInfo.classList.remove('hidden');
+  if (details.author) {
+    html += `
+      <div class="package-detail">
+        <span class="detail-label">Author:</span>
+        <span class="detail-value">${details.author}</span>
+      </div>
+    `;
+  }
+
+  if (details.license) {
+    html += `
+      <div class="package-detail">
+        <span class="detail-label">License:</span>
+        <span class="detail-value">${details.license}</span>
+      </div>
+    `;
+  }
+
+  if (details.dependencies !== undefined) {
+    html += `
+      <div class="package-detail">
+        <span class="detail-label">Dependencies:</span>
+        <span class="detail-value">${details.dependencies}</span>
+      </div>
+    `;
+  }
+
+  if (details.maintainers) {
+    html += `
+      <div class="package-detail">
+        <span class="detail-label">Maintainers:</span>
+        <span class="detail-value">${details.maintainers}</span>
+      </div>
+    `;
+  }
+
+  if (details.homepage) {
+    html += `
+      <div class="package-detail">
+        <span class="detail-label">Homepage:</span>
+        <span class="detail-value">
+          <a href="${details.homepage}" target="_blank">${details.homepage}</a>
+        </span>
+      </div>
+    `;
+  }
+
+  if (details.repository) {
+    html += `
+      <div class="package-detail">
+        <span class="detail-label">Repository:</span>
+        <span class="detail-value">
+          <a href="${details.repository}" target="_blank">${details.repository}</a>
+        </span>
+      </div>
+    `;
+  }
+
+  // Add data source info
+  html += `
+    <div class="package-detail source-info">
+      <span class="detail-label">Source:</span>
+      <span class="detail-value">${
+        details.source === "local"
+          ? "Local node_modules"
+          : details.source === "npm"
+          ? "npm Registry"
+          : "Error fetching data"
+      }</span>
+    </div>
+  `;
+
+  contentElement.innerHTML = html;
 }
 
 // Hide package info panel
 function hidePackageInfo() {
-  document.getElementById('package-info').classList.add('hidden');
+  document.getElementById("package-info").classList.add("hidden");
+
+  // Clear node selection
+  if (selectedNode) {
+    d3.select(selectedNode)
+      .select("circle")
+      .attr("stroke", null)
+      .attr("stroke-width", 0);
+
+    selectedNode = null;
+  }
+}
+
+// Filter dependencies by type
+function filterDependencies(type) {
+  if (!linkElements) return;
+
+  if (type === "all") {
+    // Show all links and nodes
+    linkElements.style("opacity", 1);
+    nodeElements.style("opacity", 1);
+  } else {
+    // Show only links of selected type and their connected nodes
+    const relevantLinkIds = new Set();
+
+    // First, identify all relevant links
+    linkElements.each(function (d) {
+      if (d.type === type) {
+        relevantLinkIds.add(`${d.source.id}-${d.target.id}`);
+      }
+    });
+
+    // Then, filter links and nodes
+    linkElements.style("opacity", (d) => (d.type === type ? 1 : 0.1));
+
+    nodeElements.style("opacity", (d) => {
+      if (d.type === "root") return 1;
+
+      // Check if this node is connected by a relevant link
+      let isConnected = false;
+      linkElements.each(function (l) {
+        if ((l.source.id === d.id || l.target.id === d.id) && l.type === type) {
+          isConnected = true;
+        }
+      });
+
+      return isConnected ? 1 : 0.3;
+    });
+  }
+}
+
+// Search for nodes by name
+function searchNodes(searchText) {
+  if (!nodeElements || searchText === "") {
+    // Reset all opacities if search is cleared
+    nodeElements.style("opacity", 1);
+    linkElements.style("opacity", 1);
+    return;
+  }
+
+  const searchLower = searchText.toLowerCase();
+
+  // Find matching nodes
+  const matchingNodes = new Set();
+  nodeElements.each((d) => {
+    if (d.name.toLowerCase().includes(searchLower)) {
+      matchingNodes.add(d.id);
+    }
+  });
+
+  // Update node visibility
+  nodeElements.style("opacity", (d) => (matchingNodes.has(d.id) ? 1 : 0.2));
+
+  // Update link visibility
+  linkElements.style("opacity", (d) =>
+    matchingNodes.has(d.source.id) && matchingNodes.has(d.target.id) ? 1 : 0.1
+  );
+}
+
+// Resize the graph on window resize
+function resizeGraph() {
+  const width = window.innerWidth;
+  const height = window.innerHeight - 100;
+
+  svg
+    .attr("width", width)
+    .attr("height", height)
+    .attr("viewBox", [0, 0, width, height]);
+
+  simulation
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .alpha(0.3)
+    .restart();
+}
+
+// Helper functions
+function getNodeColor(type) {
+  switch (type) {
+    case "root":
+      return "#FF5722";
+    case "dependency":
+      return "#4CAF50";
+    case "devDependency":
+      return "#2196F3";
+    case "nestedDependency":
+      return "#9E9E9E";
+    default:
+      return "#9C27B0";
+  }
+}
+
+function getLinkColor(type) {
+  switch (type) {
+    case "dependency":
+      return "#4CAF50";
+    case "devDependency":
+      return "#2196F3";
+    case "nestedDependency":
+      return "#9E9E9E";
+    default:
+      return "#9C27B0";
+  }
+}
+
+function shortenText(text, maxLength) {
+  if (!text) return "";
+  return text.length > maxLength ? text.substr(0, maxLength - 3) + "..." : text;
 }
