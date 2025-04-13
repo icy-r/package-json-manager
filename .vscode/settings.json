@@ -1,0 +1,22 @@
+{
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": true
+    },
+    "javascript.format.enable": false,
+    "typescript.format.enable": false,
+    "eslint.validate": ["typescript"],
+    "files.exclude": {
+        "out": false,
+        "dist": false,
+        "**/.classpath": true,
+        "**/.project": true,
+        "**/.settings": true,
+        "**/.factorypath": true
+    },
+    "search.exclude": {
+        "out": true,
+        "dist": true,
+        "**/node_modules": true
+    }
+}

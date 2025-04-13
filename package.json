@@ -1,0 +1,117 @@
+{
+  "name": "package-json-manager",
+  "displayName": "Package.json Manager",
+  "version": "0.1.0",
+  "publisher": "vscode-extensions",
+  "description": "A comprehensive visual interface for managing and visualizing package.json files within VS Code",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/icy-r/package-json-manager.git"
+  },
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCustomEditor:packageJsonManager.packageJsonEditor"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "packageJsonManager.packageJsonEditor",
+        "displayName": "Package.json Visual Editor",
+        "selector": [
+          {
+            "filenamePattern": "**/package.json"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "packageJsonManager.openPackageJsonEditor",
+        "title": "Open in Package.json Manager"
+      },
+      {
+        "command": "packageJsonManager.toggleView",
+        "title": "Toggle between visual editor and text editor"
+      },
+      {
+        "command": "packageJsonManager.showDependencyGraph",
+        "title": "Show Dependency Graph"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "packageJsonManager.openPackageJsonEditor",
+          "when": "resourceFilename == 'package.json'"
+        },
+        {
+          "command": "packageJsonManager.toggleView",
+          "when": "resourceFilename == 'package.json'"
+        },
+        {
+          "command": "packageJsonManager.showDependencyGraph",
+          "when": "resourceFilename == 'package.json'"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "packageJsonManager.toggleView",
+          "when": "resourceFilename == 'package.json'",
+          "group": "navigation"
+        },
+        {
+          "command": "packageJsonManager.showDependencyGraph",
+          "when": "resourceFilename == 'package.json'",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "test-compile": "tsc -p ./",
+    "test": "node ./out/test/runTest.js",
+    "lint": "eslint src --ext ts",
+    "package-extension": "vsce package"
+  },
+  "devDependencies": {
+    "@types/glob": "^7.1.4",
+    "@types/mocha": "^9.0.0",
+    "@types/node": "14.x",
+    "@types/vscode": "^1.60.0",
+    "@typescript-eslint/eslint-plugin": "^4.31.1",
+    "@typescript-eslint/parser": "^4.31.1",
+    "@vscode/test-electron": "^1.6.2",
+    "eslint": "^7.32.0",
+    "glob": "^7.1.7",
+    "mocha": "^9.1.1",
+    "ts-loader": "^9.2.5",
+    "typescript": "^4.4.3",
+    "vsce": "^2.15.0",
+    "webpack": "^5.52.1",
+    "webpack-cli": "^4.8.0"
+  },
+  "dependencies": {
+    "axios": "^0.24.0",
+    "semver": "^7.3.5"
+  },
+  "keywords": [
+    "package.json",
+    "npm",
+    "dependency",
+    "management",
+    "visualization"
+  ],
+  "author": "",
+  "license": "MIT"
+}
