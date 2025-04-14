@@ -147,4 +147,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
-export function deactivate() {}
+export function deactivate(): void {
+  // This function is intentionally empty
+  // Clean-up will be handled by VS Code's disposal mechanisms
+}

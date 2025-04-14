@@ -12,7 +12,10 @@ export class DependencyGraphPanel {
   /**
    * Creates or shows a dependency graph panel
    */
-  public static createOrShow(extensionUri: vscode.Uri, packageJsonUri: vscode.Uri) {
+  public static createOrShow(
+    extensionUri: vscode.Uri,
+    packageJsonUri: vscode.Uri
+  ) {
     // If we already have a panel, show it
     if (DependencyGraphPanel.currentPanel) {
       DependencyGraphPanel.currentPanel.panel.reveal(vscode.ViewColumn.Beside);
@@ -22,22 +25,30 @@ export class DependencyGraphPanel {
 
     // Otherwise, create a new panel
     const panel = vscode.window.createWebviewPanel(
-      'dependencyGraphView',
-      'Dependency Graph',
+      "dependencyGraphView",
+      "Dependency Graph",
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,
         localResourceRoots: [
-          vscode.Uri.file(path.join(extensionUri.fsPath, 'media')),
-          vscode.Uri.file(path.join(extensionUri.fsPath, 'dist'))
-        ]
+          vscode.Uri.file(path.join(extensionUri.fsPath, "media")),
+          vscode.Uri.file(path.join(extensionUri.fsPath, "dist")),
+        ],
       }
     );
 
-    DependencyGraphPanel.currentPanel = new DependencyGraphPanel(panel, extensionUri, packageJsonUri);
+    DependencyGraphPanel.currentPanel = new DependencyGraphPanel(
+      panel,
+      extensionUri,
+      packageJsonUri
+    );
   }
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, packageJsonUri: vscode.Uri) {
+  private constructor(
+    panel: vscode.WebviewPanel,
+    extensionUri: vscode.Uri,
+    packageJsonUri: vscode.Uri
+  ) {
     this.panel = panel;
     this.extensionUri = extensionUri;
     this.packageJsonUri = packageJsonUri;
@@ -51,7 +62,7 @@ export class DependencyGraphPanel {
 
     // Update the content based on view changes
     this.panel.onDidChangeViewState(
-      e => {
+      (e) => {
         if (this.panel.visible) {
           this.update(this.packageJsonUri);
         }
@@ -62,17 +73,17 @@ export class DependencyGraphPanel {
 
     // Handle messages from the webview
     this.panel.webview.onDidReceiveMessage(
-      message => {
+      (message) => {
         switch (message.command) {
-          case 'refresh':
+          case "refresh":
             this.update(this.packageJsonUri);
             break;
-          case 'getPackageDetails':
-            this.getPackageDetails(message.packageName).then(details => {
+          case "getPackageDetails":
+            this.getPackageDetails(message.packageName).then((details) => {
               this.panel.webview.postMessage({
-                command: 'packageDetails',
+                command: "packageDetails",
                 details,
-                packageName: message.packageName
+                packageName: message.packageName,
               });
             });
             break;
@@ -93,28 +104,37 @@ export class DependencyGraphPanel {
       const graphData = await this.generateDependencyGraphData(packageJson);
 
       // Update the webview with the graph data
-      this.panel.webview.html = this.getHtmlForWebview(this.panel.webview, graphData);
+      this.panel.webview.html = this.getHtmlForWebview(
+        this.panel.webview,
+        graphData
+      );
     } catch (error) {
-      this.panel.webview.html = this.getErrorHtml('Failed to generate dependency graph.');
+      this.panel.webview.html = this.getErrorHtml(
+        "Failed to generate dependency graph."
+      );
     }
   }
 
   private getHtmlForWebview(webview: vscode.Webview, graphData: any): string {
     // Get paths to extension resources
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.file(path.join(this.extensionUri.fsPath, 'media', 'dependencyGraph.js'))
+      vscode.Uri.file(
+        path.join(this.extensionUri.fsPath, "media", "dependencyGraph.js")
+      )
     );
     const styleUri = webview.asWebviewUri(
-      vscode.Uri.file(path.join(this.extensionUri.fsPath, 'media', 'dependencyGraph.css'))
+      vscode.Uri.file(
+        path.join(this.extensionUri.fsPath, "media", "dependencyGraph.css")
+      )
     );
     const d3Uri = webview.asWebviewUri(
-      vscode.Uri.file(path.join(this.extensionUri.fsPath, 'media', 'd3.min.js'))
+      vscode.Uri.file(path.join(this.extensionUri.fsPath, "media", "d3.min.js"))
     );
 
     // Log the paths to help with debugging
-    console.log('D3 URI:', d3Uri.toString());
-    console.log('Script URI:', scriptUri.toString());
-    console.log('Style URI:', styleUri.toString());
+    console.log("D3 URI:", d3Uri.toString());
+    console.log("Script URI:", scriptUri.toString());
+    console.log("Style URI:", styleUri.toString());
 
     // Use a nonce to whitelist which scripts can be run
     const nonce = this.getNonce();
@@ -124,7 +144,11 @@ export class DependencyGraphPanel {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https:; script-src 'nonce-${nonce}' 'unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline';">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${
+          webview.cspSource
+        } https:; script-src 'nonce-${nonce}' 'unsafe-eval'; style-src ${
+      webview.cspSource
+    } 'unsafe-inline';">
         <link href="${styleUri}" rel="stylesheet">
         <title>Dependency Graph</title>
     </head>
@@ -267,7 +291,7 @@ export class DependencyGraphPanel {
     links: any[],
     processedPackages: Set<string>,
     depth: number,
-    maxDepth: number = 3  // Limit recursion depth to avoid performance issues
+    maxDepth = 3 // Removed the explicit type annotation since it's inferrable
   ): Promise<void> {
     if (depth > maxDepth) {
       return; // Stop recursion if max depth reached
@@ -435,53 +459,54 @@ export class DependencyGraphPanel {
       };
     }
   }
-  
+
   private formatAuthor(author: any): string {
     if (!author) {
-      return 'Unknown';
+      return "Unknown";
     }
-    
-    if (typeof author === 'string') {
+
+    if (typeof author === "string") {
       return author;
     }
-    
-    if (typeof author === 'object') {
-      return author.name || 'Unknown';
+
+    if (typeof author === "object") {
+      return author.name || "Unknown";
     }
-    
-    return 'Unknown';
+
+    return "Unknown";
   }
-  
+
   private formatRepository(repo: any): string {
     if (!repo) {
-      return '';
+      return "";
     }
-    
-    if (typeof repo === 'string') {
+
+    if (typeof repo === "string") {
       return repo;
     }
-    
-    if (typeof repo === 'object') {
+
+    if (typeof repo === "object") {
       if (repo.url) {
         // Clean up git URLs to make them clickable
         let url = repo.url;
-        if (url.startsWith('git+')) {
+        if (url.startsWith("git+")) {
           url = url.substring(4);
         }
-        if (url.endsWith('.git')) {
+        if (url.endsWith(".git")) {
           url = url.substring(0, url.length - 4);
         }
         return url;
       }
-      return '';
+      return "";
     }
-    
-    return '';
+
+    return "";
   }
 
   private getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let text = "";
+    const possible =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     for (let i = 0; i < 32; i++) {
       text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
