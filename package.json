@@ -12,7 +12,10 @@
     "vscode": "^1.60.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Productivity",
+    "Formatters",
+    "Visualization"
   ],
   "activationEvents": [
     "onCustomEditor:packageJsonManager.packageJsonEditor"
@@ -110,8 +113,19 @@
     "npm",
     "dependency",
     "management",
-    "visualization"
+    "visualization",
+    "node",
+    "nodejs",
+    "package manager",
+    "dependencies",
+    "devDependencies",
+    "npm packages"
   ],
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#C80000",
+    "theme": "dark"
+  },
   "author": "icy-r",
   "license": "MIT"
 }
