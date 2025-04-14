@@ -1,7 +1,7 @@
 {
   "name": "package-json-manager",
   "displayName": "Package.json Manager",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "icy-r",
   "description": "A comprehensive visual interface for managing and visualizing package.json files within VS Code",
   "repository": {
