@@ -2,7 +2,7 @@
   "name": "package-json-manager",
   "displayName": "Package.json Manager",
   "version": "1.0.0",
-  "publisher": "vscode-extensions",
+  "publisher": "icy-r",
   "description": "A comprehensive visual interface for managing and visualizing package.json files within VS Code",
   "repository": {
     "type": "git",
