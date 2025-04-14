@@ -10,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
           node-version: '18'
           cache: 'npm'
@@ -26,7 +26,10 @@ jobs:
         
       - name: Compile
         run: npm run compile
-
+        
+      - name: Compile Tests
+        run: npm run test-compile
+        
       - name: Run Tests
         run: npm run test
         

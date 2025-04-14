@@ -31,12 +31,15 @@ jobs:
         
       - name: Compile
         run: npm run compile
-
-      - name: Package Extension
-        run: npm run package
+        
+      - name: Compile Tests
+        run: npm run test-compile
         
       - name: Run Tests
         run: npm run test
+      
+      - name: Package Extension
+        run: npm run package
       
       - name: Package VSIX
         run: npx vsce package --no-dependencies
