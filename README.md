@@ -80,5 +80,35 @@ Initial release of Package.json Manager
 ### Building
 Run `npm run package` to create a VSIX file for distribution
 
+### CI/CD Pipeline
+
+This project uses GitHub Actions for continuous integration and deployment:
+
+- **Pull Requests**: Automatically build and test the extension
+- **Main Branch**: Build, test, and create artifacts
+- **Tags**: Publish to VS Code Marketplace and create GitHub releases
+
+#### Creating a Release
+
+To create a new release:
+
+1. Make sure you're on the `main` branch with a clean working directory
+2. Run the release script with the desired version bump type:
+   ```bash
+   ./scripts/release.sh [patch|minor|major]
+   ```
+3. Edit the CHANGELOG.md file to describe your changes (will open automatically)
+4. Push the changes and tag:
+   ```bash
+   git push origin main
+   git push origin v<new-version>
+   ```
+5. The GitHub Actions workflow will automatically:
+   - Build and test the extension
+   - Create a GitHub Release with the VSIX file attached
+   - Publish the extension to the VS Code Marketplace
+
+**Note**: You need to have a Personal Access Token (PAT) with the proper permissions set as the `VSCE_PAT` secret in your GitHub repository.
+
 ### Contributing
 Contributions are welcome! Please feel free to submit a Pull Request.
