@@ -35,8 +35,16 @@ jobs:
       - name: Compile Tests
         run: npm run test-compile
         
+      - name: Copy Test Runner
+        run: |
+          mkdir -p out/test
+          cp src/test/runTest.js out/test/
+        
       - name: Run Tests
-        run: npm run test
+        uses: GabrielBB/xvfb-action@v1
+        with:
+          run: npm run test
+          working-directory: ${{ github.workspace }}
       
       - name: Package Extension
         run: npm run package
