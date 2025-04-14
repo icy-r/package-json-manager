@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.0.0] - 2025-04-14
+
+### Added
+- [Add your new features here]
+
+### Changed
+- [Add your changes here]
+
+### Fixed
+- [Add your bug fixes here]
+
+
+All notable changes to this project will be documented in this file.
+
 ## [v0.1.0] - 2025-04-13
 
 ### Added
