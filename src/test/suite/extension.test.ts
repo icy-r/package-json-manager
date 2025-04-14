@@ -5,11 +5,11 @@ suite('Extension Test Suite', () => {
   vscode.window.showInformationMessage('Starting tests...');
 
   test('Extension should be present', () => {
-    assert.ok(vscode.extensions.getExtension('vscode-extensions.package-json-manager'));
+    assert.ok(vscode.extensions.getExtension('icy-r.package-json-manager'));
   });
 
   test('Extension should activate', async () => {
-    const extension = vscode.extensions.getExtension('vscode-extensions.package-json-manager');
+    const extension = vscode.extensions.getExtension('icy-r.package-json-manager');
     if (!extension) {
       assert.fail('Extension not found');
       return;
