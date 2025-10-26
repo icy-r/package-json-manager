@@ -1,6 +1,58 @@
 import axios from 'axios';
 
 /**
+ * Raw npm registry API response types
+ */
+interface NpmRegistryPackageResponse {
+  'dist-tags'?: {
+    latest?: string;
+    [key: string]: string | undefined;
+  };
+  versions?: {
+    [version: string]: NpmPackageVersion;
+  };
+  time?: {
+    [version: string]: string;
+  };
+  [key: string]: unknown;
+}
+
+interface NpmPackageVersion {
+  name?: string;
+  version?: string;
+  description?: string;
+  author?: string | { name?: string };
+  keywords?: string[];
+  homepage?: string;
+  repository?: {
+    type?: string;
+    url?: string;
+  };
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  license?: string;
+  [key: string]: unknown;
+}
+
+interface NpmSearchResult {
+  package?: {
+    name?: string;
+    version?: string;
+    description?: string;
+    author?: {
+      name?: string;
+    };
+    date?: string;
+    keywords?: string[];
+    links?: {
+      npm?: string;
+      homepage?: string;
+      repository?: string;
+    };
+  };
+}
+
+/**
  * Error thrown when npm registry operations fail
  */
 export class NpmRegistryError extends Error {
@@ -227,7 +279,7 @@ export class NpmRegistryService {
   /**
    * Transform package details from npm registry API to our format
    */
-  private transformPackageDetails(data: any): PackageDetails {
+  private transformPackageDetails(data: NpmRegistryPackageResponse): PackageDetails {
     const latestVersion = data['dist-tags']?.latest ?? '0.0.0';
     const versionData = data.versions?.[latestVersion] ?? data;
 
@@ -252,7 +304,7 @@ export class NpmRegistryService {
   /**
    * Extract author information from package data
    */
-  private extractAuthor(packageData: any): string {
+  private extractAuthor(packageData: NpmPackageVersion | NpmRegistryPackageResponse): string {
     const author = packageData?.author ?? packageData?.publisher;
     
     if (!author) {
@@ -277,7 +329,7 @@ export class NpmRegistryService {
   /**
    * Format repository information to a clean URL
    */
-  private formatRepository(repo: any): string {
+  private formatRepository(repo: unknown): string {
     if (!repo) {
       return '';
     }

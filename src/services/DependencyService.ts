@@ -151,7 +151,7 @@ export class DependencyService {
    */
   private async processPackageDependencies(
     dependencies: Record<string, string>,
-    dependencyType: string,
+    dependencyType: DependencyNode['type'],
     sourceNodeId: string,
     nodeModulesDir: string,
     nodes: DependencyNode[],
@@ -190,7 +190,7 @@ export class DependencyService {
         id: nodeId,
         name,
         version: typeof version === 'string' ? version : 'Unknown',
-        type: dependencyType as any
+        type: dependencyType
       });
 
       // Add link
@@ -362,7 +362,10 @@ export class DependencyService {
       if (!adjList.has(link.source)) {
         adjList.set(link.source, []);
       }
-      adjList.get(link.source)!.push(link.target);
+      const sourceList = adjList.get(link.source);
+      if (sourceList) {
+        sourceList.push(link.target);
+      }
     }
 
     const dfs = (node: string, path: string[]): void => {

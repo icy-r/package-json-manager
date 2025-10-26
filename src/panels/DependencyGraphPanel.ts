@@ -113,7 +113,7 @@ export class DependencyGraphPanel {
   /**
    * Generate HTML for webview
    */
-  private getHtmlForWebview(graphData: any): string {
+  private getHtmlForWebview(graphData: DependencyGraphData): string {
     const scriptUri = this.panel.webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'media', 'dependencyGraph.js')
     );
@@ -305,7 +305,7 @@ export class DependencyGraphPanel {
   /**
    * Extract author from package data
    */
-  private extractAuthor(packageData: any): string {
+  private extractAuthor(packageData: unknown): string {
     const author = packageData?.author;
     
     if (!author) {
@@ -326,7 +326,7 @@ export class DependencyGraphPanel {
   /**
    * Format repository information
    */
-  private formatRepository(repo: any): string {
+  private formatRepository(repo: unknown): string {
     if (!repo) {
       return '';
     }
