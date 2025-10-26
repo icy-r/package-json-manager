@@ -34,24 +34,6 @@ interface NpmPackageVersion {
   [key: string]: unknown;
 }
 
-interface NpmSearchResult {
-  package?: {
-    name?: string;
-    version?: string;
-    description?: string;
-    author?: {
-      name?: string;
-    };
-    date?: string;
-    keywords?: string[];
-    links?: {
-      npm?: string;
-      homepage?: string;
-      repository?: string;
-    };
-  };
-}
-
 /**
  * Error thrown when npm registry operations fail
  */
@@ -305,12 +287,13 @@ export class NpmRegistryService {
    * Extract author information from package data
    */
   private extractAuthor(packageData: NpmPackageVersion | NpmRegistryPackageResponse): string {
-    const author = packageData?.author ?? packageData?.publisher;
+    const author = (packageData as Record<string, unknown>)?.author ?? (packageData as Record<string, unknown>)?.publisher;
     
     if (!author) {
-      const maintainers = packageData?.maintainers;
+      const maintainers = (packageData as Record<string, unknown>)?.maintainers;
       if (maintainers && Array.isArray(maintainers) && maintainers.length > 0) {
-        return maintainers[0].name ?? maintainers[0].username ?? 'Unknown';
+        const firstMaintainer = maintainers[0] as Record<string, unknown>;
+        return String(firstMaintainer?.name ?? firstMaintainer?.username ?? 'Unknown');
       }
       return 'Unknown';
     }

@@ -35,7 +35,7 @@ export interface PackageJsonData {
   main?: string;
   types?: string;
   engines?: Record<string, string>;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -159,10 +159,12 @@ export class PackageJsonService {
       updated[key] = {};
     }
     
-    updated[key]![name] = version;
-    
-    // Sort dependencies alphabetically
-    updated[key] = this.sortObject(updated[key]!);
+    const dependencies = updated[key];
+    if (dependencies && typeof dependencies === 'object') {
+      dependencies[name] = version;
+      // Sort dependencies alphabetically
+      updated[key] = this.sortObject(dependencies);
+    }
     
     return updated;
   }
@@ -183,8 +185,9 @@ export class PackageJsonService {
     const updated = { ...data };
     const key = isDev ? 'devDependencies' : 'dependencies';
     
-    if (updated[key] && updated[key]![name]) {
-      const deps = { ...updated[key] };
+    const dependencies = updated[key];
+    if (dependencies && typeof dependencies === 'object' && name in dependencies) {
+      const deps = { ...dependencies };
       delete deps[name];
       updated[key] = deps;
     }
@@ -210,8 +213,9 @@ export class PackageJsonService {
     const updated = { ...data };
     const key = isDev ? 'devDependencies' : 'dependencies';
     
-    if (updated[key] && updated[key]![name]) {
-      updated[key] = { ...updated[key], [name]: version };
+    const dependencies = updated[key];
+    if (dependencies && typeof dependencies === 'object' && name in dependencies) {
+      updated[key] = { ...dependencies, [name]: version };
     }
     
     return updated;
@@ -232,12 +236,14 @@ export class PackageJsonService {
   ): PackageJsonData {
     let updated = { ...data };
     const fromKey = toDev ? 'dependencies' : 'devDependencies';
-    const toKey = toDev ? 'devDependencies' : 'dependencies';
     
-    if (updated[fromKey] && updated[fromKey]![name]) {
-      const version = updated[fromKey]![name];
-      updated = this.removeDependency(updated, name, !toDev);
-      updated = this.addDependency(updated, name, version, toDev);
+    const fromDeps = updated[fromKey];
+    if (fromDeps && typeof fromDeps === 'object' && name in fromDeps) {
+      const version = fromDeps[name];
+      if (typeof version === 'string') {
+        updated = this.removeDependency(updated, name, !toDev);
+        updated = this.addDependency(updated, name, version, toDev);
+      }
     }
     
     return updated;
