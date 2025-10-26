@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, master]
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches: [main, master]
   workflow_dispatch: # Allows manual triggering of the workflow
@@ -20,38 +20,38 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: "18"
+          cache: "npm"
 
       - name: Install Dependencies
         run: npm ci
-      
+
       - name: Lint
         run: npm run lint
-        
+
       - name: Compile
         run: npm run compile
-        
+
       - name: Compile Tests
         run: npm run test-compile
-        
+
       - name: Copy Test Runner
         run: |
           mkdir -p out/test
           cp src/test/runTest.js out/test/
-        
+
       - name: Run Tests
         uses: GabrielBB/xvfb-action@v1
         with:
           run: npm run test
           working-directory: ${{ github.workspace }}
-      
+
       - name: Package Extension
         run: npm run package
-      
+
       - name: Package VSIX
         run: npx vsce package --no-dependencies
-      
+
       - name: Upload VSIX Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -68,33 +68,33 @@ jobs:
     permissions:
       contents: write
       packages: write
-      
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
-          
+          node-version: "18"
+          cache: "npm"
+
       - name: Install Dependencies
         run: npm ci
-        
+
       - name: Download VSIX Artifact
         uses: actions/download-artifact@v4
         with:
           name: package-json-manager-vsix
-      
+
       - name: Get VSIX file name
         id: vsix-name
         run: echo "VSIX_NAME=$(ls *.vsix)" >> $GITHUB_OUTPUT
-        
+
       - name: Get Version from Tag
         id: get-version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-        
+
       - name: Verify Package Version
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
@@ -102,12 +102,12 @@ jobs:
             echo "Error: Tag version (${{ github.ref_name }}) does not match package.json version (v$PKG_VERSION)"
             exit 1
           fi
-      
+
       - name: Publish to Visual Studio Marketplace
         run: npx vsce publish --packagePath ${{ steps.vsix-name.outputs.VSIX_NAME }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      
+
       - name: Create GitHub Release
         id: create-release
         uses: softprops/action-gh-release@v1

@@ -1,19 +1,37 @@
-code --uninstall-extension vscode-extensions.package-json-manager
+#!/bin/bash
 
-# wait till last execution to complete
-wait
+# Get the version from package.json
+VERSION=$(node -p "require('./package.json').version")
+EXTENSION_NAME="package-json-manager"
 
-# rebuild the extension
+echo "Uninstalling extension icy-r.${EXTENSION_NAME}..."
+code --uninstall-extension icy-r.${EXTENSION_NAME}
+
+# Wait for uninstall to complete
+sleep 2
+
+# Rebuild the extension
+echo "Building extension..."
 npm run package
 
-# wait till last execution to complete
-wait
+# Wait for build to complete
+sleep 1
 
-# create vsix file
+# Create vsix file
+echo "Packaging extension..."
 npx vsce package --no-dependencies
 
-# wait till last execution to complete
-wait
+# Wait for packaging to complete
+sleep 1
 
-# install the extension
-code --install-extension package-json-manager-0.1.0.vsix
+# Install the extension
+VSIX_FILE="${EXTENSION_NAME}-${VERSION}.vsix"
+echo "Installing ${VSIX_FILE}..."
+
+if [ -f "$VSIX_FILE" ]; then
+    code --install-extension "$VSIX_FILE"
+    echo "Extension installed successfully!"
+else
+    echo "Error: VSIX file not found: $VSIX_FILE"
+    exit 1
+fi

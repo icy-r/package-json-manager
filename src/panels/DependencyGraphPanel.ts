@@ -1,13 +1,22 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
+import { NpmRegistryService, PackageDetails } from '../services/NpmRegistryService';
+import { DependencyService } from '../services/DependencyService';
+import { FileSystemService } from '../services/FileSystemService';
+import { WebviewMessageRouter, WebviewResourceManager } from '../utils/webviewUtils';
 
+/**
+ * Panel for displaying dependency graph visualization
+ */
 export class DependencyGraphPanel {
   public static currentPanel: DependencyGraphPanel | undefined;
+  
   private readonly panel: vscode.WebviewPanel;
   private readonly extensionUri: vscode.Uri;
-  private readonly packageJsonUri: vscode.Uri;
-  private disposables: vscode.Disposable[] = [];
+  private packageJsonUri: vscode.Uri;
+  private readonly resourceManager: WebviewResourceManager;
+  private readonly npmService: NpmRegistryService;
+  private readonly dependencyService: DependencyService;
+  private readonly messageRouter: WebviewMessageRouter;
 
   /**
    * Creates or shows a dependency graph panel
@@ -15,7 +24,7 @@ export class DependencyGraphPanel {
   public static createOrShow(
     extensionUri: vscode.Uri,
     packageJsonUri: vscode.Uri
-  ) {
+  ): void {
     // If we already have a panel, show it
     if (DependencyGraphPanel.currentPanel) {
       DependencyGraphPanel.currentPanel.panel.reveal(vscode.ViewColumn.Beside);
@@ -23,17 +32,17 @@ export class DependencyGraphPanel {
       return;
     }
 
-    // Otherwise, create a new panel
+    // Create new panel
     const panel = vscode.window.createWebviewPanel(
-      "dependencyGraphView",
-      "Dependency Graph",
+      'dependencyGraphView',
+      'Dependency Graph',
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,
         localResourceRoots: [
-          vscode.Uri.file(path.join(extensionUri.fsPath, "media")),
-          vscode.Uri.file(path.join(extensionUri.fsPath, "dist")),
-        ],
+          vscode.Uri.joinPath(extensionUri, 'media'),
+          vscode.Uri.joinPath(extensionUri, 'dist')
+        ]
       }
     );
 
@@ -52,91 +61,68 @@ export class DependencyGraphPanel {
     this.panel = panel;
     this.extensionUri = extensionUri;
     this.packageJsonUri = packageJsonUri;
+    this.resourceManager = new WebviewResourceManager();
+    this.messageRouter = new WebviewMessageRouter();
+    
+    // Initialize services
+    const fileSystem = new FileSystemService();
+    this.npmService = new NpmRegistryService();
+    this.dependencyService = new DependencyService(fileSystem);
 
-    // Set the webview's initial html content
+    // Setup
+    this.setupMessageHandling();
     this.update(packageJsonUri);
 
-    // Listen for when the panel is disposed
-    // This happens when the user closes the panel or when the panel is closed programmatically
-    this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+    // Register disposal
+    this.resourceManager.add(
+      this.panel.onDidDispose(() => this.dispose())
+    );
 
-    // Update the content based on view changes
-    this.panel.onDidChangeViewState(
-      (e) => {
+    this.resourceManager.add(
+      this.panel.onDidChangeViewState(() => {
         if (this.panel.visible) {
           this.update(this.packageJsonUri);
         }
-      },
-      null,
-      this.disposables
-    );
-
-    // Handle messages from the webview
-    this.panel.webview.onDidReceiveMessage(
-      (message) => {
-        switch (message.command) {
-          case "refresh":
-            this.update(this.packageJsonUri);
-            break;
-          case "getPackageDetails":
-            this.getPackageDetails(message.packageName).then((details) => {
-              this.panel.webview.postMessage({
-                command: "packageDetails",
-                details,
-                packageName: message.packageName,
-              });
-            });
-            break;
-        }
-      },
-      null,
-      this.disposables
+      })
     );
   }
 
-  private async update(packageJsonUri: vscode.Uri) {
+  /**
+   * Update the panel with new package.json data
+   */
+  private async update(packageJsonUri: vscode.Uri): Promise<void> {
+    this.packageJsonUri = packageJsonUri;
+
     try {
-      // Read package.json content
-      const document = await vscode.workspace.openTextDocument(packageJsonUri);
-      const packageJson = JSON.parse(document.getText());
-
-      // Generate dependency graph data
-      const graphData = await this.generateDependencyGraphData(packageJson);
-
-      // Update the webview with the graph data
-      this.panel.webview.html = this.getHtmlForWebview(
-        this.panel.webview,
-        graphData
+      // Generate dependency graph
+      const graphData = await this.dependencyService.generateDependencyGraph(
+        packageJsonUri,
+        { maxDepth: 3, includeDev: true }
       );
+
+      // Build and set HTML
+      this.panel.webview.html = this.getHtmlForWebview(graphData);
     } catch (error) {
       this.panel.webview.html = this.getErrorHtml(
-        "Failed to generate dependency graph."
+        'Failed to generate dependency graph.'
       );
+      console.error('Error generating dependency graph:', error);
     }
   }
 
-  private getHtmlForWebview(webview: vscode.Webview, graphData: any): string {
-    // Get paths to extension resources
-    const scriptUri = webview.asWebviewUri(
-      vscode.Uri.file(
-        path.join(this.extensionUri.fsPath, "media", "dependencyGraph.js")
-      )
+  /**
+   * Generate HTML for webview
+   */
+  private getHtmlForWebview(graphData: any): string {
+    const scriptUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'media', 'dependencyGraph.js')
     );
-    const styleUri = webview.asWebviewUri(
-      vscode.Uri.file(
-        path.join(this.extensionUri.fsPath, "media", "dependencyGraph.css")
-      )
+    const styleUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'media', 'dependencyGraph.css')
     );
-    const d3Uri = webview.asWebviewUri(
-      vscode.Uri.file(path.join(this.extensionUri.fsPath, "media", "d3.min.js"))
+    const d3Uri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'media', 'd3.min.js')
     );
-
-    // Log the paths to help with debugging
-    console.log("D3 URI:", d3Uri.toString());
-    console.log("Script URI:", scriptUri.toString());
-    console.log("Style URI:", styleUri.toString());
-
-    // Use a nonce to whitelist which scripts can be run
     const nonce = this.getNonce();
 
     return `<!DOCTYPE html>
@@ -145,10 +131,10 @@ export class DependencyGraphPanel {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${
-          webview.cspSource
+          this.panel.webview.cspSource
         } https:; script-src 'nonce-${nonce}' 'unsafe-eval'; style-src ${
-      webview.cspSource
-    } 'unsafe-inline';">
+      this.panel.webview.cspSource
+    } 'unsafe-inline'; worker-src 'none'; child-src 'none';">
         <link href="${styleUri}" rel="stylesheet">
         <title>Dependency Graph</title>
     </head>
@@ -172,7 +158,6 @@ export class DependencyGraphPanel {
         </div>
 
         <main id="graph-container" class="graph-container">
-            <!-- D3 Graph will be rendered here -->
             <div class="graph-loading">
                 <p>Loading dependency graph...</p>
             </div>
@@ -197,6 +182,18 @@ export class DependencyGraphPanel {
     </html>`;
   }
 
+  private getNonce(): string {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+  }
+
+  /**
+   * Generate error HTML
+   */
   private getErrorHtml(errorMessage: string): string {
     return `<!DOCTYPE html>
     <html>
@@ -230,299 +227,145 @@ export class DependencyGraphPanel {
     </html>`;
   }
 
-  private async generateDependencyGraphData(packageJson: any): Promise<any> {
-    // Extract direct dependencies
-    const dependencies = packageJson.dependencies || {};
-    const devDependencies = packageJson.devDependencies || {};
-
-    // Get the directory of the package.json file
-    const packageJsonDir = path.dirname(this.packageJsonUri.fsPath);
-    const nodeModulesDir = path.join(packageJsonDir, "node_modules");
-
-    // Keep track of all nodes and edges
-    const nodes: any[] = [];
-    const links: any[] = [];
-
-    // Keep track of processed packages to avoid circular dependencies
-    const processedPackages = new Set<string>();
-
-    // Add root node
-    const rootNodeId = packageJson.name || "current-package";
-    nodes.push({
-      id: rootNodeId,
-      name: packageJson.name || "Current Package",
-      version: packageJson.version || "0.0.0",
-      type: "root",
+  /**
+   * Setup message handling
+   */
+  private setupMessageHandling(): void {
+    this.messageRouter.on('refresh', async () => {
+      await this.update(this.packageJsonUri);
     });
 
-    // Process dependencies recursively
-    await Promise.all([
-      this.processPackageDependencies(
-        dependencies,
-        "dependency",
-        rootNodeId,
-        nodeModulesDir,
-        nodes,
-        links,
-        processedPackages,
-        1 // Depth level
-      ),
-      this.processPackageDependencies(
-        devDependencies,
-        "devDependency",
-        rootNodeId,
-        nodeModulesDir,
-        nodes,
-        links,
-        processedPackages,
-        1 // Depth level
-      ),
-    ]);
+    this.messageRouter.on('getPackageDetails', async (message) => {
+      await this.handleGetPackageDetails(message.packageName);
+    });
 
-    return { nodes, links };
-  }
-
-  private async processPackageDependencies(
-    dependencies: Record<string, string>,
-    dependencyType: string,
-    sourceNodeId: string,
-    nodeModulesDir: string,
-    nodes: any[],
-    links: any[],
-    processedPackages: Set<string>,
-    depth: number,
-    maxDepth = 3 // Removed the explicit type annotation since it's inferrable
-  ): Promise<void> {
-    if (depth > maxDepth) {
-      return; // Stop recursion if max depth reached
-    }
-
-    await Promise.all(
-      Object.entries(dependencies).map(async ([name, version]) => {
-        // Create a unique ID based on the package name and source
-        const nodeId = name;
-
-        // Skip if we've already processed this package
-        if (processedPackages.has(nodeId)) {
-          // Just add a link if it doesn't exist yet
-          if (
-            !links.some(
-              (link) => link.source === sourceNodeId && link.target === nodeId
-            )
-          ) {
-            links.push({
-              source: sourceNodeId,
-              target: nodeId,
-              type: dependencyType,
-            });
-          }
-          return;
-        }
-
-        // Mark package as processed
-        processedPackages.add(nodeId);
-
-        // Add node
-        nodes.push({
-          id: nodeId,
-          name,
-          version: typeof version === "string" ? version : "Unknown",
-          type: dependencyType,
-        });
-
-        // Add link
-        links.push({
-          source: sourceNodeId,
-          target: nodeId,
-          type: dependencyType,
-        });
-
-        // Try to read the package's package.json to get its dependencies
-        try {
-          const packageDir = path.join(nodeModulesDir, name);
-          const packageJsonPath = path.join(packageDir, "package.json");
-
-          if (fs.existsSync(packageJsonPath)) {
-            const packageData = JSON.parse(
-              fs.readFileSync(packageJsonPath, "utf8")
-            );
-            const nestedDeps = packageData.dependencies || {};
-
-            // Recursively process nested dependencies
-            await this.processPackageDependencies(
-              nestedDeps,
-              "nestedDependency", // Mark these as nested dependencies
-              nodeId,
-              nodeModulesDir,
-              nodes,
-              links,
-              processedPackages,
-              depth + 1,
-              maxDepth
-            );
-          }
-        } catch (error) {
-          console.error(`Error processing dependencies for ${name}:`, error);
-        }
-      })
+    this.panel.webview.onDidReceiveMessage(
+      (message) => this.messageRouter.handle(message)
     );
   }
 
-  private async getPackageDetails(packageName: string): Promise<any> {
+  /**
+   * Handle package details request
+   */
+  private async handleGetPackageDetails(packageName: string): Promise<void> {
     try {
-      // First check if we can find the package in node_modules
-      const packageJsonDir = path.dirname(this.packageJsonUri.fsPath);
-      const nodeModulesDir = path.join(packageJsonDir, "node_modules");
-      const packageDir = path.join(nodeModulesDir, packageName);
-      const packageJsonPath = path.join(packageDir, "package.json");
+      // First try to get local details
+      const localDetails = await this.dependencyService.getLocalPackageDetails(
+        this.packageJsonUri,
+        packageName
+      );
 
-      if (fs.existsSync(packageJsonPath)) {
-        // If the package exists locally, read its package.json
-        const packageData = JSON.parse(
-          fs.readFileSync(packageJsonPath, "utf8")
-        );
-        return {
-          name: packageData.name,
-          version: packageData.version,
-          description: packageData.description || "No description available",
-          author: this.formatAuthor(packageData.author),
-          license: packageData.license || "Unknown",
-          homepage: packageData.homepage || "",
-          repository: this.formatRepository(packageData.repository),
-          dependencies: Object.keys(packageData.dependencies || {}).length,
-          source: "local",
+      if (localDetails) {
+        const details: PackageDetails = {
+          name: localDetails.name ?? packageName,
+          version: localDetails.version ?? 'Unknown',
+          description: localDetails.description ?? 'No description available',
+          author: this.extractAuthor(localDetails),
+          license: localDetails.license ?? 'Unknown',
+          homepage: localDetails.homepage ?? '',
+          repository: this.formatRepository(localDetails.repository),
+          dependencies: Object.keys(localDetails.dependencies ?? {}).length,
+          source: 'local'
         };
-      } else {
-        // If not found locally, fetch from npm registry
-        // Use the VS Code extension API to make HTTP requests
-        try {
-          const requestOptions: vscode.WebviewOptions = {
-            enableScripts: true,
-          };
 
-          // Fetch from npm registry
-          const response = await fetch(
-            `https://registry.npmjs.org/${packageName}`
-          );
-
-          if (!response.ok) {
-            throw new Error(
-              `Failed to fetch package data: ${response.statusText}`
-            );
-          }
-
-          const data = await response.json();
-          const latestVersion = data["dist-tags"]?.latest;
-          const versionData = latestVersion
-            ? data.versions[latestVersion]
-            : null;
-
-          if (!versionData) {
-            throw new Error("Could not find latest version data");
-          }
-
-          return {
-            name: data.name,
-            version: latestVersion,
-            description: versionData.description || "No description available",
-            author: this.formatAuthor(versionData.author),
-            license: versionData.license || "Unknown",
-            homepage: versionData.homepage || data.homepage || "",
-            repository: this.formatRepository(
-              versionData.repository || data.repository
-            ),
-            dependencies: Object.keys(versionData.dependencies || {}).length,
-            maintainers: (data.maintainers || [])
-              .map((m: any) => m.name)
-              .join(", "),
-            downloads: "Available on npm",
-            source: "npm",
-          };
-        } catch (error) {
-          console.error(`Error fetching npm data for ${packageName}:`, error);
-          // Return basic info if npm fetch fails
-          return {
-            name: packageName,
-            description: "Could not fetch package details from npm registry",
-            version: "unknown",
-            source: "error",
-          };
-        }
+        await this.panel.webview.postMessage({
+          command: 'packageDetails',
+          details,
+          packageName
+        });
+        return;
       }
+
+      // If not found locally, fetch from npm
+      const details = await this.npmService.getPackageDetails(packageName);
+      await this.panel.webview.postMessage({
+        command: 'packageDetails',
+        details,
+        packageName
+      });
     } catch (error) {
-      console.error(`Error in getPackageDetails for ${packageName}:`, error);
-      return {
-        name: packageName,
-        description: "Error retrieving package details",
-        version: "unknown",
-        source: "error",
-      };
+      await this.panel.webview.postMessage({
+        command: 'packageDetails',
+        details: {
+          name: packageName,
+          description: 'Could not fetch package details',
+          version: 'unknown',
+          author: 'Unknown',
+          license: 'Unknown',
+          homepage: '',
+          repository: '',
+          dependencies: 0,
+          source: 'error'
+        },
+        packageName
+      });
     }
   }
 
-  private formatAuthor(author: any): string {
+  /**
+   * Extract author from package data
+   */
+  private extractAuthor(packageData: any): string {
+    const author = packageData?.author;
+    
     if (!author) {
-      return "Unknown";
+      return 'Unknown';
     }
 
-    if (typeof author === "string") {
+    if (typeof author === 'string') {
       return author;
     }
 
-    if (typeof author === "object") {
-      return author.name || "Unknown";
+    if (typeof author === 'object') {
+      return author.name ?? 'Unknown';
     }
 
-    return "Unknown";
+    return 'Unknown';
   }
 
+  /**
+   * Format repository information
+   */
   private formatRepository(repo: any): string {
     if (!repo) {
-      return "";
+      return '';
     }
 
-    if (typeof repo === "string") {
-      return repo;
+    if (typeof repo === 'string') {
+      return this.cleanRepositoryUrl(repo);
     }
 
-    if (typeof repo === "object") {
-      if (repo.url) {
-        // Clean up git URLs to make them clickable
-        let url = repo.url;
-        if (url.startsWith("git+")) {
-          url = url.substring(4);
-        }
-        if (url.endsWith(".git")) {
-          url = url.substring(0, url.length - 4);
-        }
-        return url;
-      }
-      return "";
+    if (typeof repo === 'object' && repo.url) {
+      return this.cleanRepositoryUrl(repo.url);
     }
 
-    return "";
+    return '';
   }
 
-  private getNonce(): string {
-    let text = "";
-    const possible =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    for (let i = 0; i < 32; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length));
+  /**
+   * Clean repository URL
+   */
+  private cleanRepositoryUrl(url: string): string {
+    let cleaned = url;
+    
+    if (cleaned.startsWith('git+')) {
+      cleaned = cleaned.substring(4);
     }
-    return text;
+    
+    if (cleaned.endsWith('.git')) {
+      cleaned = cleaned.substring(0, cleaned.length - 4);
+    }
+    
+    return cleaned;
   }
 
-  private dispose() {
+  /**
+   * Dispose the panel
+   */
+  private dispose(): void {
     DependencyGraphPanel.currentPanel = undefined;
-
-    // Clean up resources
     this.panel.dispose();
-    while (this.disposables.length) {
-      const disposable = this.disposables.pop();
-      if (disposable) {
-        disposable.dispose();
-      }
-    }
+    this.resourceManager.dispose();
+    this.messageRouter.clear();
   }
 }

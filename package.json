@@ -1,7 +1,7 @@
 {
   "name": "package-json-manager",
   "displayName": "Package.json Manager",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publisher": "icy-r",
   "description": "A comprehensive visual interface for managing and visualizing package.json files within VS Code",
   "repository": {
@@ -9,7 +9,7 @@
     "url": "https://github.com/icy-r/package-json-manager.git"
   },
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.75.0"
   },
   "categories": [
     "Other",
@@ -17,7 +17,10 @@
     "Visualization"
   ],
   "activationEvents": [
-    "onCustomEditor:packageJsonManager.packageJsonEditor"
+    "onCustomEditor:packageJsonManager.packageJsonEditor",
+    "onCommand:packageJsonManager.openPackageJsonEditor",
+    "onCommand:packageJsonManager.toggleView",
+    "onCommand:packageJsonManager.showDependencyGraph"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -74,6 +77,41 @@
           "group": "navigation"
         }
       ]
+    },
+    "configuration": {
+      "title": "Package.json Manager",
+      "properties": {
+        "packageJsonManager.enableAutomaticVisualEditing": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically open package.json files in visual editor mode"
+        },
+        "packageJsonManager.showDependencyGraphButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show dependency graph button in editor title bar"
+        },
+        "packageJsonManager.maxDependencyDepth": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum depth for dependency graph generation"
+        },
+        "packageJsonManager.defaultViewMode": {
+          "type": "string",
+          "default": "visual",
+          "enum": [
+            "visual",
+            "text"
+          ],
+          "enumDescriptions": [
+            "Open package.json files in visual editor by default",
+            "Open package.json files in text editor by default"
+          ],
+          "description": "Default view mode for package.json files"
+        }
+      }
     }
   },
   "scripts": {
@@ -84,6 +122,9 @@
     "test-compile": "tsc -p ./",
     "test": "node ./out/test/runTest.js",
     "lint": "eslint src --ext ts",
+    "lint:fix": "eslint src --ext ts --fix",
+    "format": "prettier --write \"src/**/*.{ts,js,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\"",
     "package-extension": "vsce package"
   },
   "devDependencies": {

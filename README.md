@@ -55,9 +55,15 @@ A comprehensive Visual Studio Code extension for managing and visualizing packag
 - Node.js and npm installed on your system
 
 ## Extension Settings
+
 This extension contributes the following settings:
-* `packageJsonManager.enableAutomaticVisualEditing`: Enable/disable automatic opening of package.json files in visual editor
-* `packageJsonManager.showDependencyGraphButton`: Show/hide dependency graph button in editor title
+
+* `packageJsonManager.enableAutomaticVisualEditing`: Automatically open package.json files in visual editor mode (default: `false`)
+* `packageJsonManager.showDependencyGraphButton`: Show dependency graph button in editor title bar (default: `true`)
+* `packageJsonManager.maxDependencyDepth`: Maximum depth for dependency graph generation (default: `3`, range: 1-10)
+* `packageJsonManager.defaultViewMode`: Default view mode for package.json files - `visual` or `text` (default: `visual`)
+
+Access these settings in VS Code: `File > Preferences > Settings` and search for "Package.json Manager".
 
 ## Known Issues
 - Deep dependency resolution in the visualization graph is limited to direct dependencies
@@ -111,4 +117,24 @@ To create a new release:
 **Note**: You need to have a Personal Access Token (PAT) with the proper permissions set as the `VSCE_PAT` secret in your GitHub repository.
 
 ### Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
+
+Contributions are welcome! This project follows modern VS Code extension development best practices with a clean, layered architecture.
+
+**Before contributing, please read:**
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Development guidelines and workflow
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Technical architecture and design patterns
+
+**Quick Start for Contributors:**
+```bash
+npm install
+npm run watch
+# Press F5 in VS Code to launch Extension Development Host
+```
+
+**Code Quality:**
+- TypeScript with strict mode
+- ESLint + Prettier for code style
+- Comprehensive service layer architecture
+- Unit and integration testing required
+
+Please feel free to submit a Pull Request!

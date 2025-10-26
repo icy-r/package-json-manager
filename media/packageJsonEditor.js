@@ -6,6 +6,11 @@ let packageJson = null;
 
 // Initialize the UI once the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM loaded, requesting package.json data');
+  
+  // Show loading state
+  showLoadingState();
+  
   // Request the initial package.json data
   vscode.postMessage({ command: 'getPackageJson' });
   
@@ -20,15 +25,21 @@ document.addEventListener('DOMContentLoaded', () => {
 window.addEventListener('message', event => {
   const message = event.data;
   
+  console.log('Received message from extension:', message.command);
+  
   switch (message.command) {
     case 'packageJson':
       // Update the UI with the received package.json data
+      console.log('Received package.json data:', message.packageJson);
       packageJson = message.packageJson;
+      hideLoadingState();
       updateUI(packageJson);
       break;
       
     case 'error':
       // Display error message
+      console.error('Received error from extension:', message.error);
+      hideLoadingState();
       showError(message.error);
       break;
       
@@ -763,6 +774,65 @@ function showError(message) {
 function showNotification(message) {
   // In a real implementation, this would show a nice notification
   console.log(message);
+}
+
+// Show loading state
+function showLoadingState() {
+  const app = document.getElementById('app');
+  if (!app) return;
+  
+  // Create loading overlay if it doesn't exist
+  let loadingOverlay = document.getElementById('loading-overlay');
+  if (!loadingOverlay) {
+    loadingOverlay = document.createElement('div');
+    loadingOverlay.id = 'loading-overlay';
+    loadingOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--vscode-editor-background);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+    `;
+    loadingOverlay.innerHTML = `
+      <div style="text-align: center;">
+        <div style="margin-bottom: 16px; font-size: 16px;">Loading package.json...</div>
+        <div class="spinner" style="
+          border: 3px solid var(--vscode-editorWidget-border);
+          border-top: 3px solid var(--vscode-progressBar-background);
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          animation: spin 1s linear infinite;
+          margin: 0 auto;
+        "></div>
+      </div>
+    `;
+    app.appendChild(loadingOverlay);
+    
+    // Add spinner animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  loadingOverlay.style.display = 'flex';
+}
+
+// Hide loading state
+function hideLoadingState() {
+  const loadingOverlay = document.getElementById('loading-overlay');
+  if (loadingOverlay) {
+    loadingOverlay.style.display = 'none';
+  }
 }
 
 // HTML escape helper
