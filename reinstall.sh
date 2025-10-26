@@ -12,7 +12,7 @@ sleep 2
 
 # Rebuild the extension
 echo "Building extension..."
-npm run package
+pnpm run package
 
 # Wait for build to complete
 sleep 1

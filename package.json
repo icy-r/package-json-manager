@@ -1,7 +1,7 @@
 {
   "name": "package-json-manager",
   "displayName": "Package.json Manager",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publisher": "icy-r",
   "description": "A comprehensive visual interface for managing and visualizing package.json files within VS Code",
   "repository": {
@@ -147,7 +147,7 @@
     "webpack-cli": "^4.8.0"
   },
   "dependencies": {
-    "axios": "^0.24.0",
+    "axios": "^1.12.2",
     "semver": "^7.3.5"
   },
   "keywords": [
@@ -169,5 +169,12 @@
     "theme": "dark"
   },
   "author": "icy-r",
-  "license": "MIT"
+  "license": "MIT",
+  "pnpm": {
+    "overrides": {
+      "xml2js@<0.5.0": ">=0.5.0",
+      "nanoid@<3.3.8": ">=3.3.8",
+      "serialize-javascript@>=6.0.0 <6.0.2": ">=6.0.2"
+    }
+  }
 }
