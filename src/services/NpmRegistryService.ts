@@ -265,16 +265,21 @@ export class NpmRegistryService {
     const latestVersion = data['dist-tags']?.latest ?? '0.0.0';
     const versionData = data.versions?.[latestVersion] ?? data;
 
+    const license = versionData.license;
+    const homepage = versionData.homepage ?? (data as any).homepage;
+    const name = versionData.name ?? data.name;
+    const description = versionData.description;
+
     return {
-      name: data.name ?? 'unknown',
+      name: typeof name === 'string' ? name : 'unknown',
       version: latestVersion,
-      description: versionData.description ?? 'No description available',
-      author: this.extractAuthor(versionData),
-      license: versionData.license ?? 'Unknown',
-      homepage: versionData.homepage ?? data.homepage ?? '',
-      repository: this.formatRepository(versionData.repository ?? data.repository),
+      description: typeof description === 'string' ? description : 'No description available',
+      author: this.extractAuthor(versionData) || 'Unknown',
+      license: typeof license === 'string' ? license : (typeof license === 'object' && license !== null ? (license as any).type ?? 'Unknown' : 'Unknown'),
+      homepage: typeof homepage === 'string' ? homepage : '',
+      repository: this.formatRepository(versionData.repository ?? (data as any).repository) || '',
       dependencies: Object.keys(versionData.dependencies ?? {}).length,
-      maintainers: (data.maintainers ?? [])
+      maintainers: (Array.isArray(data.maintainers) ? data.maintainers : [])
         .map((m: any) => m.name ?? m.username)
         .filter(Boolean)
         .join(', '),
@@ -302,8 +307,9 @@ export class NpmRegistryService {
       return author;
     }
 
-    if (typeof author === 'object') {
-      return author.name ?? author.username ?? 'Unknown';
+    if (typeof author === 'object' && author !== null) {
+      const authorObj = author as Record<string, unknown>;
+      return String(authorObj.name ?? authorObj.username ?? 'Unknown');
     }
 
     return 'Unknown';
@@ -321,8 +327,11 @@ export class NpmRegistryService {
       return this.cleanRepositoryUrl(repo);
     }
 
-    if (typeof repo === 'object' && repo.url) {
-      return this.cleanRepositoryUrl(repo.url);
+    if (typeof repo === 'object' && repo !== null) {
+      const repoUrl = (repo as Record<string, unknown>).url;
+      if (typeof repoUrl === 'string') {
+        return this.cleanRepositoryUrl(repoUrl);
+      }
     }
 
     return '';

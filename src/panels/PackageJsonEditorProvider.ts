@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { NpmRegistryService } from '../services/NpmRegistryService';
-import { PackageJsonService } from '../services/PackageJsonService';
+import { PackageJsonService, PackageJsonData } from '../services/PackageJsonService';
 import { FileSystemService } from '../services/FileSystemService';
 import { WebviewMessageRouter, WebviewResourceManager } from '../utils/webviewUtils';
 
@@ -286,7 +286,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     packageJson: unknown
   ): Promise<void> {
     try {
-      await this.packageJsonService.updateDocument(document, packageJson);
+      await this.packageJsonService.updateDocument(document, packageJson as PackageJsonData);
     } catch (error) {
       vscode.window.showErrorMessage(
         `Failed to update package.json: ${error instanceof Error ? error.message : 'Unknown error'}`

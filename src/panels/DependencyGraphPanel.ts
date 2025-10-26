@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { NpmRegistryService, PackageDetails } from '../services/NpmRegistryService';
-import { DependencyService } from '../services/DependencyService';
+import { DependencyService, DependencyGraphData } from '../services/DependencyService';
 import { FileSystemService } from '../services/FileSystemService';
 import { WebviewMessageRouter, WebviewResourceManager } from '../utils/webviewUtils';
 
@@ -306,7 +306,7 @@ export class DependencyGraphPanel {
    * Extract author from package data
    */
   private extractAuthor(packageData: unknown): string {
-    const author = packageData?.author;
+    const author = (packageData as Record<string, unknown>)?.author;
     
     if (!author) {
       return 'Unknown';
@@ -316,8 +316,8 @@ export class DependencyGraphPanel {
       return author;
     }
 
-    if (typeof author === 'object') {
-      return author.name ?? 'Unknown';
+    if (typeof author === 'object' && author !== null) {
+      return (author as Record<string, unknown>).name as string ?? 'Unknown';
     }
 
     return 'Unknown';
@@ -335,8 +335,11 @@ export class DependencyGraphPanel {
       return this.cleanRepositoryUrl(repo);
     }
 
-    if (typeof repo === 'object' && repo.url) {
-      return this.cleanRepositoryUrl(repo.url);
+    if (typeof repo === 'object' && repo !== null) {
+      const repoUrl = (repo as Record<string, unknown>).url;
+      if (typeof repoUrl === 'string') {
+        return this.cleanRepositoryUrl(repoUrl);
+      }
     }
 
     return '';

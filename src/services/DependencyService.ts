@@ -9,7 +9,7 @@ export interface DependencyNode {
   id: string;
   name: string;
   version: string;
-  type: 'root' | 'dependency' | 'devDependency' | 'nestedDependency';
+  type: 'root' | 'dependency' | 'devDependency' | 'nestedDependency' | 'peerDependency';
 }
 
 /**
@@ -408,7 +408,7 @@ export class DependencyService {
    */
   filterByType(
     graphData: DependencyGraphData,
-    types: Array<'root' | 'dependency' | 'devDependency' | 'nestedDependency'>
+    types: Array<'root' | 'dependency' | 'devDependency' | 'nestedDependency' | 'peerDependency'>
   ): DependencyGraphData {
     const typeSet = new Set(types);
     
