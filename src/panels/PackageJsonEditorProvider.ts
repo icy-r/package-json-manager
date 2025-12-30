@@ -3,6 +3,7 @@ import { NpmRegistryService } from '../services/NpmRegistryService';
 import { PackageJsonService, PackageJsonData } from '../services/PackageJsonService';
 import { FileSystemService } from '../services/FileSystemService';
 import { WebviewMessageRouter, WebviewResourceManager } from '../utils/webviewUtils';
+import { ConfigurationManager } from '../config/ConfigurationManager';
 
 /**
  * Custom editor provider for package.json files
@@ -43,6 +44,36 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _token: vscode.CancellationToken
   ): Promise<void> {
+    // Don't send initial data here - wait for webview to request it via 'getPackageJson' message
+    // This avoids race condition where message is sent before webview JS is ready
+
+    // Watch for document changes
+    const changeListener = vscode.workspace.onDidChangeTextDocument(e => {
+      if (e.document.uri.toString() === document.uri.toString()) {
+        this.sendPackageJsonToWebview(webviewPanel, document);
+      }
+    });
+    //this.context.subscriptions.push(changeListener);
+
+    // Cleanup on dispose
+    webviewPanel.onDidDispose(() => {
+      try {
+        changeListener.dispose();
+      } catch (error) {
+        console.log("onDidChangeTextDocument listener's already disposed");
+      }
+    });
+
+    if (!this.isDefaultEditor()) {
+      // close the custom editor panel immediately
+      webviewPanel.dispose();
+
+      // open with default text editor
+      //await vscode.commands.executeCommand('vscode.open', document.uri);
+      vscode.window.showTextDocument(document);
+
+      return;
+    }
     // Setup webview options
     webviewPanel.webview.options = {
       enableScripts: true,
@@ -57,21 +88,11 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
 
     // Setup message handling
     this.setupMessageHandling(webviewPanel, document);
+  }
 
-    // Don't send initial data here - wait for webview to request it via 'getPackageJson' message
-    // This avoids race condition where message is sent before webview JS is ready
-
-    // Watch for document changes
-    const changeListener = vscode.workspace.onDidChangeTextDocument(e => {
-      if (e.document.uri.toString() === document.uri.toString()) {
-        this.sendPackageJsonToWebview(webviewPanel, document);
-      }
-    });
-
-    // Cleanup on dispose
-    webviewPanel.onDidDispose(() => {
-      changeListener.dispose();
-    });
+  private isDefaultEditor(): boolean {
+    const defaultMode = ConfigurationManager.getDefaultViewMode();
+    return defaultMode === 'visual';
   }
 
   /**

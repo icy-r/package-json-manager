@@ -17,12 +17,7 @@
     "Formatters",
     "Visualization"
   ],
-  "activationEvents": [
-    "onCustomEditor:packageJsonManager.packageJsonEditor",
-    "onCommand:packageJsonManager.openPackageJsonEditor",
-    "onCommand:packageJsonManager.toggleView",
-    "onCommand:packageJsonManager.showDependencyGraph"
-  ],
+  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [

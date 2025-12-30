@@ -87,10 +87,7 @@ export class ConfigurationManager {
    * Get the default view mode
    */
   static getDefaultViewMode(): 'visual' | 'text' {
-    return ConfigurationManager.get<'visual' | 'text'>(
-      ConfigurationKey.DefaultViewMode,
-      'visual'
-    );
+    return ConfigurationManager.get<'visual' | 'text'>(ConfigurationKey.DefaultViewMode, 'text');
   }
 
   /**
