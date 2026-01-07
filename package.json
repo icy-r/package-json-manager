@@ -43,7 +43,7 @@
         "command": "packageJsonManager.toggleView",
         "title": "Toggle between visual editor and text editor",
         "icon": {
-          "light": "media/light/toggle-light.svg",
+          "light": "media/toggle-light.svg",
           "dark": "media/toggle.svg"
         }
       },
