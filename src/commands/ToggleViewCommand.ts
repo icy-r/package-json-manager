@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { PackageJsonEditorProvider } from '../panels/PackageJsonEditorProvider';
 
 /**
  * Command to toggle between visual editor and text editor for package.json
@@ -10,7 +11,7 @@ export class ToggleViewCommand {
   async execute(uri?: vscode.Uri): Promise<void> {
     // Get the target URI - use provided URI or try to determine from active editor
     const targetUri = uri || this.getActivePackageJsonUri();
-    
+
     if (!targetUri) {
       vscode.window.showErrorMessage('No package.json file is currently open');
       return;
@@ -18,11 +19,16 @@ export class ToggleViewCommand {
 
     // Determine if we're currently in visual or text editor mode
     const isInVisualMode = await this.isInVisualEditor(targetUri);
-    
+
+    // Close opened editor in order to show only one of them
+    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+
     // Toggle to the other mode
     if (isInVisualMode) {
       await this.switchToTextEditor(targetUri);
     } else {
+      PackageJsonEditorProvider.forcedToBeOpened = true;
+
       await this.switchToCustomEditor(targetUri);
     }
   }
@@ -59,15 +65,17 @@ export class ToggleViewCommand {
     for (const tabGroup of vscode.window.tabGroups.all) {
       for (const tab of tabGroup.tabs) {
         if (tab.input instanceof vscode.TabInputCustom) {
-          if (tab.input.viewType === 'packageJsonManager.packageJsonEditor' &&
-              tab.input.uri.toString() === uri.toString() &&
-              tab.isActive) {
+          if (
+            tab.input.viewType === 'packageJsonManager.packageJsonEditor' &&
+            tab.input.uri.toString() === uri.toString() &&
+            tab.isActive
+          ) {
             return true;
           }
         }
       }
     }
-    
+
     return false;
   }
 
@@ -89,4 +97,3 @@ export class ToggleViewCommand {
     );
   }
 }
-

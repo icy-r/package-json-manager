@@ -11,6 +11,14 @@ export enum ConfigurationKey {
 }
 
 /**
+ * Configuration modes of editing
+ */
+export const visual = 'visual' as const;
+export const text = 'text' as const;
+
+export type ViewMode = typeof visual | typeof text;
+
+/**
  * Type-safe configuration manager for extension settings
  */
 export class ConfigurationManager {
@@ -25,7 +33,7 @@ export class ConfigurationManager {
 
   /**
    * Get a configuration value
-   * 
+   *
    * @param key - Configuration key
    * @param defaultValue - Default value if not set
    * @returns Configuration value
@@ -37,7 +45,7 @@ export class ConfigurationManager {
 
   /**
    * Update a configuration value
-   * 
+   *
    * @param key - Configuration key
    * @param value - New value
    * @param target - Configuration target (global, workspace, etc.)
@@ -55,30 +63,21 @@ export class ConfigurationManager {
    * Check if automatic visual editing is enabled
    */
   static isAutomaticVisualEditingEnabled(): boolean {
-    return ConfigurationManager.get(
-      ConfigurationKey.EnableAutomaticVisualEditing,
-      false
-    );
+    return ConfigurationManager.get(ConfigurationKey.EnableAutomaticVisualEditing, false);
   }
 
   /**
    * Check if dependency graph button should be shown
    */
   static shouldShowDependencyGraphButton(): boolean {
-    return ConfigurationManager.get(
-      ConfigurationKey.ShowDependencyGraphButton,
-      true
-    );
+    return ConfigurationManager.get(ConfigurationKey.ShowDependencyGraphButton, true);
   }
 
   /**
    * Get the maximum dependency depth for graph generation
    */
   static getMaxDependencyDepth(): number {
-    const depth = ConfigurationManager.get(
-      ConfigurationKey.MaxDependencyDepth,
-      3
-    );
+    const depth = ConfigurationManager.get(ConfigurationKey.MaxDependencyDepth, 3);
     // Ensure value is between 1 and 10
     return Math.max(1, Math.min(10, depth));
   }
@@ -86,20 +85,20 @@ export class ConfigurationManager {
   /**
    * Get the default view mode
    */
-  static getDefaultViewMode(): 'visual' | 'text' {
-    return ConfigurationManager.get<'visual' | 'text'>(ConfigurationKey.DefaultViewMode, 'text');
+  static getDefaultViewMode(): ViewMode {
+    return ConfigurationManager.get<ViewMode>(ConfigurationKey.DefaultViewMode, text);
   }
 
   /**
    * Watch for configuration changes
-   * 
+   *
    * @param callback - Callback to invoke when configuration changes
    * @returns Disposable to stop watching
    */
   static onDidChangeConfiguration(
     callback: (event: vscode.ConfigurationChangeEvent) => void
   ): vscode.Disposable {
-    return vscode.workspace.onDidChangeConfiguration((event) => {
+    return vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration(ConfigurationManager.extensionId)) {
         callback(event);
       }
@@ -108,15 +107,12 @@ export class ConfigurationManager {
 
   /**
    * Watch for a specific configuration key change
-   * 
+   *
    * @param key - Configuration key to watch
    * @param callback - Callback to invoke when the key changes
    * @returns Disposable to stop watching
    */
-  static onDidChange<T>(
-    key: ConfigurationKey,
-    callback: (newValue: T) => void
-  ): vscode.Disposable {
+  static onDidChange<T>(key: ConfigurationKey, callback: (newValue: T) => void): vscode.Disposable {
     return ConfigurationManager.onDidChangeConfiguration(() => {
       const value = ConfigurationManager.get<T>(key, undefined as T);
       callback(value);
@@ -125,7 +121,7 @@ export class ConfigurationManager {
 
   /**
    * Reset a configuration value to its default
-   * 
+   *
    * @param key - Configuration key
    * @param target - Configuration target
    */
@@ -155,20 +151,19 @@ export class ConfigurationManager {
    */
   static validate(): string[] {
     const errors: string[] = [];
-    
+
     // Validate maxDependencyDepth
     const depth = ConfigurationManager.get(ConfigurationKey.MaxDependencyDepth, 3);
     if (typeof depth !== 'number' || depth < 1 || depth > 10) {
       errors.push('maxDependencyDepth must be a number between 1 and 10');
     }
-    
+
     // Validate defaultViewMode
-    const viewMode = ConfigurationManager.get(ConfigurationKey.DefaultViewMode, 'visual');
-    if (viewMode !== 'visual' && viewMode !== 'text') {
-      errors.push('defaultViewMode must be either "visual" or "text"');
+    const viewMode = ConfigurationManager.get(ConfigurationKey.DefaultViewMode, visual);
+    if (viewMode !== visual && viewMode !== text) {
+      errors.push(`defaultViewMode must be either "${visual}" or "${text}"`);
     }
-    
+
     return errors;
   }
 }
-

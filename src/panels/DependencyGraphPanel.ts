@@ -9,7 +9,7 @@ import { WebviewMessageRouter, WebviewResourceManager } from '../utils/webviewUt
  */
 export class DependencyGraphPanel {
   public static currentPanel: DependencyGraphPanel | undefined;
-  
+
   private readonly panel: vscode.WebviewPanel;
   private readonly extensionUri: vscode.Uri;
   private packageJsonUri: vscode.Uri;
@@ -21,10 +21,7 @@ export class DependencyGraphPanel {
   /**
    * Creates or shows a dependency graph panel
    */
-  public static createOrShow(
-    extensionUri: vscode.Uri,
-    packageJsonUri: vscode.Uri
-  ): void {
+  public static createOrShow(extensionUri: vscode.Uri, packageJsonUri: vscode.Uri): void {
     // If we already have a panel, show it
     if (DependencyGraphPanel.currentPanel) {
       DependencyGraphPanel.currentPanel.panel.reveal(vscode.ViewColumn.Beside);
@@ -63,7 +60,7 @@ export class DependencyGraphPanel {
     this.packageJsonUri = packageJsonUri;
     this.resourceManager = new WebviewResourceManager();
     this.messageRouter = new WebviewMessageRouter();
-    
+
     // Initialize services
     const fileSystem = new FileSystemService();
     this.npmService = new NpmRegistryService();
@@ -74,9 +71,7 @@ export class DependencyGraphPanel {
     this.update(packageJsonUri);
 
     // Register disposal
-    this.resourceManager.add(
-      this.panel.onDidDispose(() => this.dispose())
-    );
+    this.resourceManager.add(this.panel.onDidDispose(() => this.dispose()));
 
     this.resourceManager.add(
       this.panel.onDidChangeViewState(() => {
@@ -95,18 +90,20 @@ export class DependencyGraphPanel {
 
     try {
       // Generate dependency graph
-      const graphData = await this.dependencyService.generateDependencyGraph(
-        packageJsonUri,
-        { maxDepth: 3, includeDev: true }
-      );
+      const graphData = await this.dependencyService.generateDependencyGraph(packageJsonUri, {
+        maxDepth: 3,
+        includeDev: true
+      });
 
       // Build and set HTML
       this.panel.webview.html = this.getHtmlForWebview(graphData);
     } catch (error) {
-      this.panel.webview.html = this.getErrorHtml(
-        'Failed to generate dependency graph.'
-      );
-      console.error('Error generating dependency graph:', error);
+      try {
+        this.panel.webview.html = this.getErrorHtml('Failed to generate dependency graph.');
+      } catch (err) {
+        return;
+      }
+      console.error('Error generating dependency graph on update:', error);
     }
   }
 
@@ -235,13 +232,11 @@ export class DependencyGraphPanel {
       await this.update(this.packageJsonUri);
     });
 
-    this.messageRouter.on('getPackageDetails', async (message) => {
+    this.messageRouter.on('getPackageDetails', async message => {
       await this.handleGetPackageDetails(message.packageName);
     });
 
-    this.panel.webview.onDidReceiveMessage(
-      (message) => this.messageRouter.handle(message)
-    );
+    this.panel.webview.onDidReceiveMessage(message => this.messageRouter.handle(message));
   }
 
   /**
@@ -307,7 +302,7 @@ export class DependencyGraphPanel {
    */
   private extractAuthor(packageData: unknown): string {
     const author = (packageData as Record<string, unknown>)?.author;
-    
+
     if (!author) {
       return 'Unknown';
     }
@@ -317,7 +312,7 @@ export class DependencyGraphPanel {
     }
 
     if (typeof author === 'object' && author !== null) {
-      return (author as Record<string, unknown>).name as string ?? 'Unknown';
+      return ((author as Record<string, unknown>).name as string) ?? 'Unknown';
     }
 
     return 'Unknown';
@@ -350,15 +345,15 @@ export class DependencyGraphPanel {
    */
   private cleanRepositoryUrl(url: string): string {
     let cleaned = url;
-    
+
     if (cleaned.startsWith('git+')) {
       cleaned = cleaned.substring(4);
     }
-    
+
     if (cleaned.endsWith('.git')) {
       cleaned = cleaned.substring(0, cleaned.length - 4);
     }
-    
+
     return cleaned;
   }
 

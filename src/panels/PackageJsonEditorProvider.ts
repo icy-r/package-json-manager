@@ -3,7 +3,7 @@ import { NpmRegistryService } from '../services/NpmRegistryService';
 import { PackageJsonService, PackageJsonData } from '../services/PackageJsonService';
 import { FileSystemService } from '../services/FileSystemService';
 import { WebviewMessageRouter, WebviewResourceManager } from '../utils/webviewUtils';
-import { ConfigurationManager } from '../config/ConfigurationManager';
+import { ConfigurationManager, visual } from '../config/ConfigurationManager';
 
 /**
  * Custom editor provider for package.json files
@@ -22,10 +22,20 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
   }
 
   /**
+   * Disposable instance of PackageJsonEditorProvider registered in subscriptions
+   */
+  private static registered: vscode.Disposable | undefined;
+
+  /**
+   * Flag controlling is custom editor forced to be opened or not
+   */
+  public static forcedToBeOpened: boolean;
+
+  /**
    * Static factory method to register the provider
    */
-  public static register(context: vscode.ExtensionContext): vscode.Disposable {
-    return vscode.window.registerCustomEditorProvider(
+  public static register(context: vscode.ExtensionContext): void {
+    PackageJsonEditorProvider.registered = vscode.window.registerCustomEditorProvider(
       'packageJsonManager.packageJsonEditor',
       new PackageJsonEditorProvider(context),
       {
@@ -33,6 +43,20 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
         supportsMultipleEditorsPerDocument: false
       }
     );
+    const found = context.subscriptions.findIndex(subscription => {
+      return subscription === PackageJsonEditorProvider.registered;
+    });
+    if (found < 0) {
+      context.subscriptions.push(PackageJsonEditorProvider.registered);
+    }
+  }
+
+  /**
+   * Static method determines is PackageJsonEditor set as editor by default
+   */
+  public static isDefaultEditor(): boolean {
+    const defaultMode = ConfigurationManager.getDefaultViewMode();
+    return defaultMode === visual;
   }
 
   /**
@@ -53,23 +77,29 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
         this.sendPackageJsonToWebview(webviewPanel, document);
       }
     });
-    //this.context.subscriptions.push(changeListener);
+
+    // Safe disposal
+    const tryDispose = (obj: vscode.Disposable, objMessage: string) => {
+      try {
+        obj.dispose();
+      } catch (error) {
+        console.log(`${objMessage} - ${error}`);
+      }
+    };
 
     // Cleanup on dispose
     webviewPanel.onDidDispose(() => {
-      try {
-        changeListener.dispose();
-      } catch (error) {
-        console.log("onDidChangeTextDocument listener's already disposed");
-      }
+      tryDispose(changeListener, 'webviewPanel.onDidDispose');
     });
 
-    if (!this.isDefaultEditor()) {
-      // close the custom editor panel immediately
-      webviewPanel.dispose();
+    if (
+      !PackageJsonEditorProvider.isDefaultEditor() &&
+      !PackageJsonEditorProvider.forcedToBeOpened
+    ) {
+      // Close the custom editor panel immediately
+      await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
 
-      // open with default text editor
-      //await vscode.commands.executeCommand('vscode.open', document.uri);
+      // Open with default text editor
       vscode.window.showTextDocument(document);
 
       return;
@@ -88,11 +118,8 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
 
     // Setup message handling
     this.setupMessageHandling(webviewPanel, document);
-  }
 
-  private isDefaultEditor(): boolean {
-    const defaultMode = ConfigurationManager.getDefaultViewMode();
-    return defaultMode === 'visual';
+    PackageJsonEditorProvider.forcedToBeOpened = false;
   }
 
   /**
@@ -247,16 +274,16 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       await this.sendPackageJsonToWebview(webviewPanel, document);
     });
 
-    router.on('updatePackageJson', async (message) => {
+    router.on('updatePackageJson', async message => {
       console.log('Received updatePackageJson request from webview');
       await this.handleUpdatePackageJson(document, message.packageJson);
     });
 
-    router.on('searchNpmPackage', async (message) => {
+    router.on('searchNpmPackage', async message => {
       await this.handleSearchNpmPackage(webviewPanel, message.query);
     });
 
-    router.on('executeScript', async (message) => {
+    router.on('executeScript', async message => {
       await this.handleExecuteScript(webviewPanel, message.script);
     });
 
@@ -268,9 +295,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       await vscode.commands.executeCommand('packageJsonManager.showDependencyGraph');
     });
 
-    webviewPanel.webview.onDidReceiveMessage(
-      (message) => router.handle(message)
-    );
+    webviewPanel.webview.onDidReceiveMessage(message => router.handle(message));
   }
 
   /**
@@ -350,7 +375,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
       const terminal = vscode.window.createTerminal('Package.json Manager');
       terminal.sendText(`npm run ${script}`);
       terminal.show();
-      
+
       await webviewPanel.webview.postMessage({
         command: 'scriptExecuted',
         script

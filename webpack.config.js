@@ -1,10 +1,10 @@
 const path = require('path');
 
 module.exports = {
+  target: 'node',
   entry: './src/extension.ts',
   devtool: 'source-map',
   mode: 'development',
-  target: 'node',
   module: {
     rules: [
       {
@@ -24,5 +24,9 @@ module.exports = {
   },
   externals: {
     vscode: 'commonjs vscode'
+  },
+  node: {
+    __dirname: false,
+    __filename: false
   }
 };

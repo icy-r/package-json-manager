@@ -11,9 +11,7 @@ export function activate(context: vscode.ExtensionContext): void {
   console.log('Package.json Manager extension is now active');
 
   // Register the custom editor provider
-  context.subscriptions.push(
-    PackageJsonEditorProvider.register(context)
-  );
+  PackageJsonEditorProvider.register(context);
 
   // Register commands
   registerCommands(context);
@@ -34,15 +32,13 @@ function registerCommands(context: vscode.ExtensionContext): void {
       'packageJsonManager.openPackageJsonEditor',
       (uri?: vscode.Uri) => openEditorCommand.execute(uri)
     ),
-    
-    vscode.commands.registerCommand(
-      'packageJsonManager.toggleView',
-      (uri?: vscode.Uri) => toggleViewCommand.execute(uri)
+
+    vscode.commands.registerCommand('packageJsonManager.toggleView', (uri?: vscode.Uri) =>
+      toggleViewCommand.execute(uri)
     ),
-    
-    vscode.commands.registerCommand(
-      'packageJsonManager.showDependencyGraph',
-      (uri?: vscode.Uri) => showGraphCommand.execute(uri)
+
+    vscode.commands.registerCommand('packageJsonManager.showDependencyGraph', (uri?: vscode.Uri) =>
+      showGraphCommand.execute(uri)
     )
   );
 }

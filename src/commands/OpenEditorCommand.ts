@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { PackageJsonEditorProvider } from '../panels/PackageJsonEditorProvider';
 
 /**
  * Command to open a package.json file in the custom editor
@@ -9,14 +10,16 @@ export class OpenEditorCommand {
    */
   async execute(uri?: vscode.Uri): Promise<void> {
     // Resolve URI if not provided
-    const targetUri = uri ?? await this.resolvePackageJsonUri();
-    
+    const targetUri = uri ?? (await this.resolvePackageJsonUri());
+
     if (!targetUri) {
       vscode.window.showErrorMessage('No active package.json file');
       return;
     }
 
     try {
+      PackageJsonEditorProvider.forcedToBeOpened = true;
+
       await vscode.commands.executeCommand(
         'vscode.openWith',
         targetUri,
@@ -24,7 +27,9 @@ export class OpenEditorCommand {
       );
     } catch (error) {
       vscode.window.showErrorMessage(
-        `Could not open package.json editor: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Could not open package.json editor: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
       );
     }
   }
@@ -65,4 +70,3 @@ export class OpenEditorCommand {
     return pickedFile?.uri;
   }
 }
-
