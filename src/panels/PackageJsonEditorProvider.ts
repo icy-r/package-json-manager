@@ -3,7 +3,7 @@ import { NpmRegistryService } from '../services/NpmRegistryService';
 import { PackageJsonService, PackageJsonData } from '../services/PackageJsonService';
 import { FileSystemService } from '../services/FileSystemService';
 import { WebviewMessageRouter, WebviewResourceManager } from '../utils/webviewUtils';
-import { ConfigurationManager, ViewMode, text, visual } from '../config/ConfigurationManager';
+import { ConfigurationManager, ViewMode, visual } from '../config/ConfigurationManager';
 
 /**
  * Custom editor provider for package.json files
@@ -27,6 +27,11 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
   private static registered: vscode.Disposable | undefined;
 
   /**
+   * Disposable instance of registration of onDidChangeDefaultViewMode in subscriptions
+   */
+  private static registeredChanges: vscode.Disposable | undefined;
+
+  /**
    * Static factory method to register the provider
    */
   public static async register(context: vscode.ExtensionContext): Promise<void> {
@@ -44,16 +49,29 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     context.subscriptions.push(PackageJsonEditorProvider.registered);
 
     const defaultMode = ConfigurationManager.getDefaultViewMode();
+    await this.changeDefaultEditor(defaultMode);
   }
 
   /**
-   * Static method determines is PackageJsonEditor set as editor by default
+   * Static method registers and tracks changes of internal configuration required by this provider
    */
-  public static isDefaultEditor(): boolean {
-    const defaultMode = ConfigurationManager.getDefaultViewMode();
-    return defaultMode === visual;
+  public static registerConfigurationChanges(context: vscode.ExtensionContext): void {
+    if (PackageJsonEditorProvider.registeredChanges) {
+      return;
+    }
+    PackageJsonEditorProvider.registeredChanges = ConfigurationManager.onDidChangeDefaultViewMode(
+      mode => {
+        PackageJsonEditorProvider.changeDefaultEditor(mode);
+      }
+    );
+    context.subscriptions.push(PackageJsonEditorProvider.registeredChanges);
   }
 
+  /**
+   * Static method changes default VS Code setting 'workbench.editorAssociations'
+   * It doesn't affect internal PackageJsonManager's settings
+   * @param mode A {@link ViewMode} mode change to: visual (custom) or text (default)
+   */
   public static async changeDefaultEditor(mode: ViewMode): Promise<void> {
     const folders = vscode.workspace.workspaceFolders;
     const workspaceUri = folders?.[0]?.uri ?? vscode.Uri.file('_');

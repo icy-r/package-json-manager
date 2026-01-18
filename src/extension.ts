@@ -12,6 +12,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Register the custom editor provider
   await PackageJsonEditorProvider.register(context);
+  PackageJsonEditorProvider.registerConfigurationChanges(context);
 
   // Register commands
   registerCommands(context);
