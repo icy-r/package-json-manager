@@ -7,11 +7,11 @@ import { ShowGraphCommand } from './commands/ShowGraphCommand';
 /**
  * Activate the extension
  */
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log('Package.json Manager extension is now active');
 
   // Register the custom editor provider
-  PackageJsonEditorProvider.register(context);
+  await PackageJsonEditorProvider.register(context);
 
   // Register commands
   registerCommands(context);

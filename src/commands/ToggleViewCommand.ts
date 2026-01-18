@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PackageJsonEditorProvider } from '../panels/PackageJsonEditorProvider';
+import { text, visual } from '../config/ConfigurationManager';
 
 /**
  * Command to toggle between visual editor and text editor for package.json
@@ -25,10 +26,10 @@ export class ToggleViewCommand {
 
     // Toggle to the other mode
     if (isInVisualMode) {
+      PackageJsonEditorProvider.changeDefaultEditor(text);
       await this.switchToTextEditor(targetUri);
     } else {
-      PackageJsonEditorProvider.forcedToBeOpened = true;
-
+      PackageJsonEditorProvider.changeDefaultEditor(visual);
       await this.switchToCustomEditor(targetUri);
     }
   }
@@ -83,6 +84,7 @@ export class ToggleViewCommand {
    * Switch to text editor
    */
   private async switchToTextEditor(uri: vscode.Uri): Promise<void> {
+    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     await vscode.commands.executeCommand('vscode.openWith', uri, 'default');
   }
 
@@ -90,6 +92,7 @@ export class ToggleViewCommand {
    * Switch to custom editor
    */
   private async switchToCustomEditor(uri: vscode.Uri): Promise<void> {
+    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     await vscode.commands.executeCommand(
       'vscode.openWith',
       uri,

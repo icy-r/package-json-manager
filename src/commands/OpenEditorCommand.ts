@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PackageJsonEditorProvider } from '../panels/PackageJsonEditorProvider';
+import { visual } from '../config/ConfigurationManager';
 
 /**
  * Command to open a package.json file in the custom editor
@@ -18,7 +19,7 @@ export class OpenEditorCommand {
     }
 
     try {
-      PackageJsonEditorProvider.forcedToBeOpened = true;
+      PackageJsonEditorProvider.changeDefaultEditor(visual);
 
       await vscode.commands.executeCommand(
         'vscode.openWith',
