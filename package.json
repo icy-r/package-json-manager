@@ -17,7 +17,9 @@
     "Formatters",
     "Visualization"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "workspaceContains:package.json"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "customEditors": [
