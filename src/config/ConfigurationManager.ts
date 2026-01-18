@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 /**
  * Configuration keys for the extension
  */
-export enum ConfigurationKey {
+enum ConfigurationKey {
   EnableAutomaticVisualEditing = 'enableAutomaticVisualEditing',
   ShowDependencyGraphButton = 'showDependencyGraphButton',
   MaxDependencyDepth = 'maxDependencyDepth',
@@ -16,6 +16,9 @@ export enum ConfigurationKey {
 export const visual = 'visual' as const;
 export const text = 'text' as const;
 
+/**
+ * The type of modes of editing
+ */
 export type ViewMode = typeof visual | typeof text;
 
 /**
@@ -83,10 +86,17 @@ export class ConfigurationManager {
   }
 
   /**
-   * Get the default view mode
+   * Get default {@link ViewMode}
    */
   static getDefaultViewMode(): ViewMode {
     return ConfigurationManager.get<ViewMode>(ConfigurationKey.DefaultViewMode, text);
+  }
+
+  /**
+   * Watch for default {@link ViewMode}
+   */
+  static onDidChangeDefaultViewMode(callback: (newValue: ViewMode) => void): vscode.Disposable {
+    return ConfigurationManager.onDidChange<ViewMode>(ConfigurationKey.DefaultViewMode, callback);
   }
 
   /**

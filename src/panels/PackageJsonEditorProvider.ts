@@ -43,7 +43,7 @@ export class PackageJsonEditorProvider implements vscode.CustomTextEditorProvide
     );
     context.subscriptions.push(PackageJsonEditorProvider.registered);
 
-    await this.changeDefaultEditor(this.isDefaultEditor() ? visual : text);
+    const defaultMode = ConfigurationManager.getDefaultViewMode();
   }
 
   /**
