@@ -66,6 +66,7 @@
       return;
     }
 
+    hideNoModulesMessage();
     const width = container.clientWidth;
     const height = container.clientHeight;
     svg.attr('viewBox', [0, 0, width, height]);
@@ -264,12 +265,26 @@
 
   function showNoModulesMessage(message) {
     const container = document.getElementById('graph-container');
-    container.innerHTML = `
-      <div class="no-modules-message">
-        <div class="msg-icon">📦</div>
-        <div class="msg-text">${esc(message)}</div>
-        <div class="msg-hint">Run npm install or pnpm install in your project</div>
-      </div>`;
+    let overlay = container.querySelector('.no-modules-message');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'no-modules-message';
+      container.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+      <div class="msg-icon">📦</div>
+      <div class="msg-text">${esc(message)}</div>
+      <div class="msg-hint">Run npm install or pnpm install in your project</div>`;
+    overlay.style.display = '';
+    const svg = document.getElementById('graph');
+    if (svg) { svg.style.display = 'none'; }
+  }
+
+  function hideNoModulesMessage() {
+    const overlay = document.querySelector('.no-modules-message');
+    if (overlay) { overlay.style.display = 'none'; }
+    const svg = document.getElementById('graph');
+    if (svg) { svg.style.display = ''; }
   }
 
   function zoomBy(factor) {

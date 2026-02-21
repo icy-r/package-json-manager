@@ -59,7 +59,7 @@ jobs:
                         labels: 'security,dependencies'
                       });
                       if (issues.data.length === 0) {
-                        github.rest.issues.create({
+                        await github.rest.issues.create({
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           title: 'Security Vulnerabilities Detected',

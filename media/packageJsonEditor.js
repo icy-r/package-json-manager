@@ -219,7 +219,7 @@
   }
 
   function field(key, label, value) {
-    return `<div class="form-group"><label>${label}</label><input type="text" data-field="${key}" value="${attr(value || '')}"></div>`;
+    return `<div class="form-group"><label>${esc(label)}</label><input type="text" data-field="${attr(key)}" value="${attr(value || '')}"></div>`;
   }
 
   function renderJsonBlock(obj) {
@@ -278,7 +278,7 @@
           <option value="regular" ${depFilter === 'regular' ? 'selected' : ''}>Production</option>
           <option value="dev" ${depFilter === 'dev' ? 'selected' : ''}>Development</option>
         </select>
-        <span class="dep-count">${list.length}${localSearchTerm ? ` of ${total}` : ''} package${total !== 1 ? 's' : ''}</span>
+        <span class="dep-count">${list.length}${localSearchTerm ? ` of ${total}` : ''} package${list.length !== 1 ? 's' : ''}</span>
       </div>
       <div class="dep-list">${items}</div>`;
   }

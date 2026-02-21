@@ -20,8 +20,9 @@ export class PackageJsonService {
   parse(text: string): PackageJsonData {
     try {
       return JSON.parse(text) as PackageJsonData;
-    } catch {
-      throw new PackageJsonError('Invalid JSON in package.json');
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new PackageJsonError(`Invalid JSON in package.json: ${detail}`);
     }
   }
 
