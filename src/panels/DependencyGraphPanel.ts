@@ -82,11 +82,16 @@ export class DependencyGraphPanel {
             <option value="regular">Dependencies</option>
             <option value="dev">Dev Dependencies</option>
           </select>
+          <div class="zoom-controls">
+            <button class="zoom-btn" id="zoom-in" title="Zoom in">+</button>
+            <button class="zoom-btn" id="zoom-out" title="Zoom out">−</button>
+            <button class="zoom-btn" id="zoom-reset" title="Reset zoom">⊙</button>
+          </div>
         </div>
         <div id="graph-container">
           <svg id="graph"></svg>
         </div>
-        <div id="details-panel" class="hidden"></div>`
+        <div id="details-panel"></div>`
     });
   }
 
