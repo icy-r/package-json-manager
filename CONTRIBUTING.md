@@ -29,8 +29,9 @@ This project follows the standard open-source code of conduct. Be respectful, in
 
 ### Prerequisites
 
-- Node.js 16+ and npm
-- Visual Studio Code
+- Node.js 20+
+- pnpm (see `packageManager` field in package.json for exact version)
+- Visual Studio Code ^1.75.0
 - Git
 
 ### Installation
@@ -41,7 +42,7 @@ git clone https://github.com/icy-r/package-json-manager.git
 cd package-json-manager
 
 # Install dependencies
-npm install
+pnpm install
 
 # Open in VS Code
 code .
@@ -51,21 +52,21 @@ code .
 
 ```bash
 # Start watch mode for development
-npm run watch
+pnpm run watch
 
 # In VS Code, press F5 to launch Extension Development Host
 
 # Run tests
-npm test
+pnpm run test
 
 # Lint code
-npm run lint
+pnpm run lint
 
 # Format code
-npm run format
+pnpm run format
 
 # Build production bundle
-npm run package
+pnpm run package
 ```
 
 ## Architecture
@@ -111,16 +112,16 @@ We use ESLint and Prettier for consistent code style:
 
 ```bash
 # Check formatting
-npm run format:check
+pnpm run format:check
 
 # Fix formatting
-npm run format
+pnpm run format
 
 # Lint
-npm run lint
+pnpm run lint
 
 # Fix linting issues
-npm run lint:fix
+pnpm run lint:fix
 ```
 
 ### Import Organization
@@ -137,8 +138,7 @@ Order imports as follows:
 // 1. Node built-ins
 import * as path from 'path';
 
-// 2. External dependencies
-import axios from 'axios';
+// 2. External dependencies (if any)
 
 // 3. VS Code APIs
 import * as vscode from 'vscode';
@@ -221,10 +221,10 @@ suite('ServiceName', () => {
 
 ```bash
 # Run all tests
-npm test
+pnpm run test
 
-# Run specific test file
-npm test -- --grep "ServiceName"
+# Compile tests only
+pnpm run test-compile
 ```
 
 ### Coverage Requirements
@@ -289,21 +289,19 @@ npm test -- --grep "ServiceName"
 
 ## Release Process
 
-Releases are automated through GitHub Actions:
+Releases are **fully automated** via the `release.yml` GitHub Actions workflow:
 
-1. Update version in `package.json`
-2. Update `CHANGELOG.md`
-3. Commit changes
-4. Create and push tag:
-   ```bash
-   git tag v1.0.4
-   git push origin v1.0.4
-   ```
-5. GitHub Actions will:
-   - Build the extension
-   - Run tests
-   - Create GitHub release
-   - Publish to VS Code Marketplace
+1. Merge your PR to `main` using conventional commit messages
+2. The workflow automatically:
+   - Detects version bump type from commit messages (`fix:` → patch, `feat:` → minor, `feat!:` → major)
+   - Bumps `package.json` version
+   - Creates a git tag
+   - Publishes to VS Code Marketplace
+   - Creates a GitHub Release with VSIX attached
+
+**Manual override**: Use the workflow dispatch to specify an explicit bump type.
+
+**Fallback**: You can still manually tag (`git tag v2.2.0 && git push --tags`) to trigger the CI pipeline.
 
 ## Project Structure
 
