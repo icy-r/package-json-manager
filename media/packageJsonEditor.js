@@ -73,20 +73,28 @@
     const keywords = Array.isArray(data.keywords) ? data.keywords : [];
     const repoUrl = typeof data.repository === 'object' ? (data.repository?.url || '') : (data.repository || '');
     const bugsUrl = typeof data.bugs === 'object' ? (data.bugs?.url || '') : (data.bugs || '');
+    const enginesNode = typeof data.engines === 'object' ? (data.engines?.node || '') : '';
+    const enginesVscode = typeof data.engines === 'object' ? (data.engines?.vscode || '') : '';
 
     return `
+      <div class="section-label">Identity</div>
       <div class="form-grid">
         ${field('name', 'Name', data.name)}
         ${field('version', 'Version', data.version)}
+        ${field('displayName', 'Display Name', data.displayName)}
+        ${field('publisher', 'Publisher', data.publisher)}
         <div class="form-group full-width">
           <label>Description</label>
           <textarea data-field="description" rows="2">${esc(data.description || '')}</textarea>
         </div>
+      </div>
+
+      <div class="section-label">People & Links</div>
+      <div class="form-grid">
         ${field('author', 'Author', authorVal)}
         ${field('license', 'License', data.license)}
         ${field('homepage', 'Homepage', data.homepage)}
-        ${field('main', 'Entry Point', data.main)}
-        <div class="form-group full-width">
+        <div class="form-group">
           <label>Repository URL</label>
           <input type="text" data-field="repository" data-complex="true" value="${attr(repoUrl)}">
         </div>
@@ -94,6 +102,28 @@
           <label>Bug Tracker URL</label>
           <input type="text" data-field="bugs" data-complex="true" value="${attr(bugsUrl)}">
         </div>
+      </div>
+
+      <div class="section-label">Entry Points & Engines</div>
+      <div class="form-grid">
+        ${field('main', 'Main', data.main)}
+        ${field('module', 'Module', data.module)}
+        ${field('types', 'Types', data.types || data.typings)}
+        ${field('browser', 'Browser', data.browser)}
+        <div class="form-group">
+          <label>Node Engine</label>
+          <input type="text" data-field="engines.node" data-engine="true" value="${attr(enginesNode)}">
+        </div>
+        <div class="form-group">
+          <label>VS Code Engine</label>
+          <input type="text" data-field="engines.vscode" data-engine="true" value="${attr(enginesVscode)}">
+        </div>
+        ${field('packageManager', 'Package Manager', data.packageManager)}
+        ${field('type', 'Module Type', data.type)}
+      </div>
+
+      <div class="section-label">Metadata</div>
+      <div class="form-grid">
         <div class="form-group full-width">
           <label>Keywords</label>
           <div class="keywords-container" id="keywords-container">
@@ -101,16 +131,19 @@
             <input type="text" class="keywords-input" id="keyword-input" placeholder="${keywords.length ? '' : 'Type and press Enter to add...'}" />
           </div>
         </div>
-        <div class="form-group full-width add-field-section">
-          <details>
-            <summary class="add-field-toggle">Add custom field</summary>
-            <div class="add-field-form">
-              <div class="form-group"><label>Field Name</label><input type="text" id="custom-field-name" placeholder="e.g. funding"></div>
-              <div class="form-group"><label>Value</label><input type="text" id="custom-field-value" placeholder="Value"></div>
-              <button class="btn btn-primary btn-sm" id="add-custom-field">Add Field</button>
-            </div>
-          </details>
-        </div>
+        ${field('private', 'Private', data.private !== undefined ? String(data.private) : '')}
+        ${field('sideEffects', 'Side Effects', data.sideEffects !== undefined ? String(data.sideEffects) : '')}
+      </div>
+
+      <div class="form-group full-width add-field-section">
+        <details>
+          <summary class="add-field-toggle">Add custom field</summary>
+          <div class="add-field-form">
+            <div class="form-group"><label>Field Name</label><input type="text" id="custom-field-name" placeholder="e.g. funding"></div>
+            <div class="form-group"><label>Value</label><input type="text" id="custom-field-value" placeholder="Value"></div>
+            <button class="btn btn-primary btn-sm" id="add-custom-field">Add Field</button>
+          </div>
+        </details>
       </div>`;
   }
 
@@ -339,14 +372,27 @@
       input.addEventListener('change', () => {
         const fieldName = input.dataset.field;
         const isComplex = input.dataset.complex === 'true';
+        const isEngine = input.dataset.engine === 'true';
+
         if (isComplex) {
           if (fieldName === 'repository') {
             vscode.postMessage({ type: 'updateField', field: 'repository', value: { type: 'git', url: input.value } });
           } else if (fieldName === 'bugs') {
             vscode.postMessage({ type: 'updateField', field: 'bugs', value: { url: input.value } });
           }
+        } else if (isEngine) {
+          const engineKey = fieldName.split('.')[1];
+          const engines = { ...(data.engines || {}), [engineKey]: input.value };
+          if (!input.value) { delete engines[engineKey]; }
+          vscode.postMessage({ type: 'updateField', field: 'engines', value: Object.keys(engines).length ? engines : undefined });
+        } else if (fieldName === 'private' || fieldName === 'sideEffects') {
+          const val = input.value.toLowerCase();
+          if (val === 'true') { vscode.postMessage({ type: 'updateField', field: fieldName, value: true }); }
+          else if (val === 'false') { vscode.postMessage({ type: 'updateField', field: fieldName, value: false }); }
+          else if (val === '') { vscode.postMessage({ type: 'updateField', field: fieldName, value: undefined }); }
+          else { vscode.postMessage({ type: 'updateField', field: fieldName, value: input.value }); }
         } else {
-          vscode.postMessage({ type: 'updateField', field: fieldName, value: input.value });
+          vscode.postMessage({ type: 'updateField', field: fieldName, value: input.value || undefined });
         }
       });
     });
@@ -437,7 +483,7 @@
           const el = document.getElementById('dep-search');
           if (el) { el.focus(); el.setSelectionRange(q.length, q.length); }
         } else {
-          if (!q) { npmResults = null; renderNpmResults(); return; }
+          if (!q || q.length < 2) { npmResults = null; renderNpmResults(); return; }
           searchDebounce = setTimeout(() => {
             const container = document.getElementById('npm-results-container');
             if (container) {

@@ -133,6 +133,19 @@ body {
 }
 
 .tab-content { display: none; padding: 20px 0; }
+
+.section-label {
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  opacity: 0.4;
+  margin: 20px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-label:first-child { margin-top: 0; }
 .tab-content.active { display: block; animation: fadeIn 0.2s ease; }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }

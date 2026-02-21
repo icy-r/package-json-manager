@@ -28,7 +28,7 @@ export interface NpmPackageDetails {
 
 export class NpmRegistryService {
   async searchPackages(query: string, size = 20): Promise<NpmSearchResult[]> {
-    if (!query.trim()) {
+    if (!query.trim() || query.trim().length < 2) {
       return [];
     }
 
