@@ -1,847 +1,318 @@
-// Get VS Code API
-const vscode = acquireVsCodeApi();
+(function () {
+  const vscode = acquireVsCodeApi();
+  let currentData = null;
+  let currentTab = 'overview';
+  let depFilter = 'all';
+  let searchTimeout = null;
 
-// Store the current package.json data
-let packageJson = null;
-
-// Initialize the UI once the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM loaded, requesting package.json data');
-  
-  // Show loading state
-  showLoadingState();
-  
-  // Request the initial package.json data
-  vscode.postMessage({ command: 'getPackageJson' });
-  
-  // Set up tab navigation
-  setupTabs();
-  
-  // Set up event listeners for UI interactions
-  setupEventListeners();
-});
-
-// Handle messages from the extension
-window.addEventListener('message', event => {
-  const message = event.data;
-  
-  console.log('Received message from extension:', message.command);
-  
-  switch (message.command) {
-    case 'packageJson':
-      // Update the UI with the received package.json data
-      console.log('Received package.json data:', message.packageJson);
-      packageJson = message.packageJson;
-      hideLoadingState();
-      updateUI(packageJson);
-      break;
-      
-    case 'error':
-      // Display error message
-      console.error('Received error from extension:', message.error);
-      hideLoadingState();
-      showError(message.error);
-      break;
-      
-    case 'searchResults':
-      // Update search results in add dependency modal
-      updateSearchResults(message.results);
-      break;
-      
-    case 'scriptExecuted':
-      // Show notification that script was executed
-      showNotification(`Script "${message.script}" is running in terminal`);
-      break;
+  function init() {
+    vscode.postMessage({ type: 'ready' });
   }
-});
 
-// Set up tab navigation
-function setupTabs() {
-  const tabBtns = document.querySelectorAll('.tab-btn');
-  const tabContents = document.querySelectorAll('.tab-content');
-  
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      // Remove active class from all tabs
-      tabBtns.forEach(b => b.classList.remove('active'));
-      tabContents.forEach(c => c.classList.remove('active'));
-      
-      // Add active class to clicked tab
-      btn.classList.add('active');
-      const tabId = btn.getAttribute('data-tab');
-      document.getElementById(tabId).classList.add('active');
-    });
+  window.addEventListener('message', event => {
+    const msg = event.data;
+    switch (msg.type) {
+      case 'update':
+        try {
+          currentData = JSON.parse(msg.content);
+          render();
+        } catch {
+          showError('Invalid JSON in package.json');
+        }
+        break;
+      case 'searchResults':
+        renderSearchResults(msg.results);
+        break;
+      case 'packageDetails':
+        renderDetailPanel(msg.details);
+        break;
+      case 'error':
+        showError(msg.message);
+        break;
+    }
   });
-  
-  // Set up subtabs in dependencies tab
-  const subtabBtns = document.querySelectorAll('.subtab-btn');
-  const subtabContents = document.querySelectorAll('.subtab-content');
-  
-  subtabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      // Remove active class from all subtabs
-      subtabBtns.forEach(b => b.classList.remove('active'));
-      subtabContents.forEach(c => c.classList.remove('active'));
-      
-      // Add active class to clicked subtab
-      btn.classList.add('active');
-      const subtabId = btn.getAttribute('data-subtab');
-      document.getElementById(subtabId).classList.add('active');
-    });
-  });
-}
 
-// Set up event listeners
-function setupEventListeners() {
-  // Toggle view button
-  document.getElementById('btn-toggle-view').addEventListener('click', () => {
-    vscode.postMessage({ command: 'toggleView' });
-  });
-  
-  // Form inputs in Package Info tab
-  const packageInfoInputs = document.querySelectorAll('#package-info input, #package-info textarea');
-  packageInfoInputs.forEach(input => {
-    input.addEventListener('change', () => {
-      updatePackageJsonFromForm();
-    });
-  });
-  
-  // Add dependency button
-  document.getElementById('btn-add-dependency').addEventListener('click', () => {
-    showAddDependencyModal();
-  });
-  
-  // Show dependency graph button
-  document.getElementById('btn-show-graph').addEventListener('click', () => {
-    vscode.postMessage({ command: 'showDependencyGraph' });
-  });
-  
-  // Add script button
-  document.getElementById('btn-add-script').addEventListener('click', () => {
-    showAddScriptModal();
-  });
-  
-  // Search dependencies
-  document.getElementById('search-dependencies').addEventListener('input', (e) => {
-    filterDependencies(e.target.value, 'dependencies');
-  });
-  
-  // Search dev dependencies
-  document.getElementById('search-dev-dependencies').addEventListener('input', (e) => {
-    filterDependencies(e.target.value, 'devDependencies');
-  });
-  
-  // Search scripts
-  document.getElementById('search-scripts').addEventListener('input', (e) => {
-    filterScripts(e.target.value);
-  });
-  
-  // Modal close button
-  document.getElementById('modal-close').addEventListener('click', () => {
-    closeModal();
-  });
-}
-
-// Update UI with package.json data
-function updateUI(data) {
-  // Update package info tab
-  document.getElementById('package-name').value = data.name || '';
-  document.getElementById('package-version').value = data.version || '';
-  document.getElementById('package-description').value = data.description || '';
-  document.getElementById('package-author').value = typeof data.author === 'string' ? data.author : (data.author?.name || '');
-  document.getElementById('package-license').value = data.license || '';
-  document.getElementById('package-keywords').value = Array.isArray(data.keywords) ? data.keywords.join(', ') : '';
-  
-  // Update dependencies tab
-  updateDependenciesList('dependencies', data.dependencies || {});
-  updateDependenciesList('devDependencies', data.devDependencies || {});
-  
-  // Update scripts tab
-  updateScriptsList(data.scripts || {});
-}
-
-// Update dependencies list in UI
-function updateDependenciesList(type, dependencies) {
-  const listElement = type === 'dependencies' 
-    ? document.getElementById('dependencies-list') 
-    : document.getElementById('dev-dependencies-list');
-  
-  // Clear the list
-  listElement.innerHTML = '';
-  
-  // Check if there are dependencies
-  const dependencyEntries = Object.entries(dependencies);
-  if (dependencyEntries.length === 0) {
-    listElement.innerHTML = '<div class="empty-state">No dependencies found.</div>';
-    return;
-  }
-  
-  // Add each dependency to the list
-  dependencyEntries.forEach(([name, version]) => {
-    const dependencyItem = document.createElement('div');
-    dependencyItem.className = 'dependency-item';
-    dependencyItem.innerHTML = `
-      <div class="dependency-info">
-        <div class="dependency-name">${escapeHtml(name)}</div>
-        <div class="dependency-version">${escapeHtml(version)}</div>
+  function render() {
+    if (!currentData) { return; }
+    const root = document.getElementById('root');
+    root.innerHTML = `
+      <div class="tabs">
+        <button class="tab ${currentTab === 'overview' ? 'active' : ''}" data-tab="overview">Overview</button>
+        <button class="tab ${currentTab === 'dependencies' ? 'active' : ''}" data-tab="dependencies">Dependencies</button>
+        <button class="tab ${currentTab === 'scripts' ? 'active' : ''}" data-tab="scripts">Scripts</button>
       </div>
-      <div class="dependency-actions">
-        <button class="btn-edit" data-name="${escapeHtml(name)}" data-version="${escapeHtml(version)}" data-type="${type}">Edit</button>
-        <button class="btn-delete btn-danger" data-name="${escapeHtml(name)}" data-type="${type}">Remove</button>
+      <div id="tab-overview" class="tab-content ${currentTab === 'overview' ? 'active' : ''}">${renderOverview()}</div>
+      <div id="tab-dependencies" class="tab-content ${currentTab === 'dependencies' ? 'active' : ''}">${renderDependencies()}</div>
+      <div id="tab-scripts" class="tab-content ${currentTab === 'scripts' ? 'active' : ''}">${renderScripts()}</div>
+      <div id="detail-panel" class="detail-panel"></div>
+    `;
+    bindEvents();
+  }
+
+  function renderOverview() {
+    const fields = [
+      { key: 'name', label: 'Name', type: 'text' },
+      { key: 'version', label: 'Version', type: 'text' },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'author', label: 'Author', type: 'text' },
+      { key: 'license', label: 'License', type: 'text' },
+      { key: 'homepage', label: 'Homepage', type: 'text' },
+      { key: 'main', label: 'Main', type: 'text' },
+      { key: 'keywords', label: 'Keywords (comma-separated)', type: 'text' }
+    ];
+
+    return fields.map(f => {
+      let val = currentData[f.key] ?? '';
+      if (f.key === 'keywords' && Array.isArray(val)) { val = val.join(', '); }
+      if (f.key === 'author' && typeof val === 'object') { val = val.name || ''; }
+      const input = f.type === 'textarea'
+        ? `<textarea data-field="${f.key}">${escapeHtml(val)}</textarea>`
+        : `<input type="text" data-field="${f.key}" value="${escapeAttr(val)}">`;
+      return `<div class="form-group"><label>${f.label}</label>${input}</div>`;
+    }).join('');
+  }
+
+  function renderDependencies() {
+    const deps = Object.entries(currentData.dependencies || {}).map(([n, v]) => ({ name: n, version: v, type: 'dep' }));
+    const devDeps = Object.entries(currentData.devDependencies || {}).map(([n, v]) => ({ name: n, version: v, type: 'devDep' }));
+    let allDeps = [...deps, ...devDeps];
+
+    if (depFilter === 'regular') { allDeps = deps; }
+    else if (depFilter === 'dev') { allDeps = devDeps; }
+
+    const rows = allDeps.length === 0
+      ? '<tr><td colspan="4" class="empty-state">No dependencies found</td></tr>'
+      : allDeps.map(d => `
+        <tr>
+          <td><span class="dep-name" data-name="${escapeAttr(d.name)}">${escapeHtml(d.name)}</span></td>
+          <td><input class="version-input" data-name="${escapeAttr(d.name)}" value="${escapeAttr(d.version)}" style="width:120px;padding:2px 4px;background:var(--input-bg);color:var(--input-fg);border:1px solid var(--input-border);"></td>
+          <td><span class="badge">${d.type === 'dep' ? 'dep' : 'dev'}</span></td>
+          <td>
+            <button class="btn btn-small btn-secondary move-dep" data-name="${escapeAttr(d.name)}" data-to-dev="${d.type === 'dep' ? 'true' : 'false'}">${d.type === 'dep' ? '→ dev' : '→ dep'}</button>
+            <button class="btn btn-small btn-danger remove-dep" data-name="${escapeAttr(d.name)}">Remove</button>
+          </td>
+        </tr>`).join('');
+
+    return `
+      <div class="dep-filter">
+        <select id="dep-type-filter">
+          <option value="all" ${depFilter === 'all' ? 'selected' : ''}>All</option>
+          <option value="regular" ${depFilter === 'regular' ? 'selected' : ''}>Dependencies</option>
+          <option value="dev" ${depFilter === 'dev' ? 'selected' : ''}>Dev Dependencies</option>
+        </select>
       </div>
-    `;
-    
-    listElement.appendChild(dependencyItem);
-    
-    // Add event listeners for edit and delete buttons
-    dependencyItem.querySelector('.btn-edit').addEventListener('click', (e) => {
-      const name = e.target.getAttribute('data-name');
-      const version = e.target.getAttribute('data-version');
-      const type = e.target.getAttribute('data-type');
-      showEditDependencyModal(name, version, type);
-    });
-    
-    dependencyItem.querySelector('.btn-delete').addEventListener('click', (e) => {
-      const name = e.target.getAttribute('data-name');
-      const type = e.target.getAttribute('data-type');
-      showDeleteDependencyConfirmation(name, type);
-    });
-  });
-}
-
-// Update scripts list in UI
-function updateScriptsList(scripts) {
-  const listElement = document.getElementById('scripts-list');
-  
-  // Clear the list
-  listElement.innerHTML = '';
-  
-  // Check if there are scripts
-  const scriptEntries = Object.entries(scripts);
-  if (scriptEntries.length === 0) {
-    listElement.innerHTML = '<div class="empty-state">No scripts found.</div>';
-    return;
+      <table class="dep-table">
+        <thead><tr><th>Package</th><th>Version</th><th>Type</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="search-section">
+        <h4>Add Dependency</h4>
+        <input type="text" id="npm-search" placeholder="Search npm packages...">
+        <div id="search-results" class="search-results"></div>
+      </div>`;
   }
-  
-  // Add each script to the list
-  scriptEntries.forEach(([name, command]) => {
-    const scriptItem = document.createElement('div');
-    scriptItem.className = 'script-item';
-    scriptItem.innerHTML = `
-      <div class="script-info">
-        <div class="script-name">${escapeHtml(name)}</div>
-        <div class="script-command">${escapeHtml(command)}</div>
+
+  function renderScripts() {
+    const scripts = Object.entries(currentData.scripts || {});
+    const items = scripts.length === 0
+      ? '<div class="empty-state">No scripts defined</div>'
+      : scripts.map(([name, cmd]) => `
+        <div class="script-item">
+          <span class="script-name">${escapeHtml(name)}</span>
+          <span class="script-command">${escapeHtml(cmd)}</span>
+          <div class="script-actions">
+            <button class="btn btn-small btn-primary run-script" data-name="${escapeAttr(name)}">Run</button>
+            <button class="btn btn-small btn-secondary edit-script" data-name="${escapeAttr(name)}" data-command="${escapeAttr(cmd)}">Edit</button>
+            <button class="btn btn-small btn-danger delete-script" data-name="${escapeAttr(name)}">Delete</button>
+          </div>
+        </div>`).join('');
+
+    return `
+      <div class="add-form" id="add-script-form">
+        <div class="form-group"><label>Name</label><input type="text" id="new-script-name" placeholder="script-name"></div>
+        <div class="form-group"><label>Command</label><input type="text" id="new-script-cmd" placeholder="echo hello"></div>
+        <button class="btn btn-primary" id="add-script-btn">Add Script</button>
       </div>
-      <div class="script-actions">
-        <button class="btn-run" data-name="${escapeHtml(name)}">Run</button>
-        <button class="btn-edit" data-name="${escapeHtml(name)}" data-command="${escapeHtml(command)}">Edit</button>
-        <button class="btn-delete btn-danger" data-name="${escapeHtml(name)}">Remove</button>
-      </div>
+      ${items}`;
+  }
+
+  function renderSearchResults(results) {
+    const container = document.getElementById('search-results');
+    if (!container) { return; }
+    if (results.length === 0) {
+      container.innerHTML = '<div class="empty-state">No packages found</div>';
+      return;
+    }
+    container.innerHTML = results.map(r => `
+      <div class="search-result-item">
+        <div class="search-result-info">
+          <div class="name">${escapeHtml(r.name)} <span class="badge">${escapeHtml(r.version)}</span></div>
+          <div class="desc">${escapeHtml(r.description || '')}</div>
+        </div>
+        <div class="search-result-actions">
+          <button class="btn btn-small btn-primary add-dep" data-name="${escapeAttr(r.name)}" data-version="^${escapeAttr(r.version)}" data-dev="false">+ dep</button>
+          <button class="btn btn-small btn-secondary add-dep" data-name="${escapeAttr(r.name)}" data-version="^${escapeAttr(r.version)}" data-dev="true">+ dev</button>
+        </div>
+      </div>`).join('');
+    bindSearchResultEvents();
+  }
+
+  function renderDetailPanel(details) {
+    const panel = document.getElementById('detail-panel');
+    if (!panel) { return; }
+    const depCount = Object.keys(details.dependencies || {}).length;
+    panel.innerHTML = `
+      <button class="close-btn" id="close-detail">×</button>
+      <h3>${escapeHtml(details.name)}</h3>
+      <div class="detail-row"><div class="detail-label">Version</div><div class="detail-value">${escapeHtml(details.version)}</div></div>
+      <div class="detail-row"><div class="detail-label">Description</div><div class="detail-value">${escapeHtml(details.description || 'N/A')}</div></div>
+      <div class="detail-row"><div class="detail-label">License</div><div class="detail-value">${escapeHtml(details.license || 'N/A')}</div></div>
+      <div class="detail-row"><div class="detail-label">Homepage</div><div class="detail-value">${details.homepage ? `<a href="${escapeAttr(details.homepage)}">${escapeHtml(details.homepage)}</a>` : 'N/A'}</div></div>
+      <div class="detail-row"><div class="detail-label">Dependencies</div><div class="detail-value">${depCount}</div></div>
+      <div class="detail-row"><div class="detail-label">Source</div><div class="detail-value"><span class="badge">${escapeHtml(details.source)}</span></div></div>
     `;
-    
-    listElement.appendChild(scriptItem);
-    
-    // Add event listeners for run, edit, and delete buttons
-    scriptItem.querySelector('.btn-run').addEventListener('click', (e) => {
-      const name = e.target.getAttribute('data-name');
-      executeScript(name);
+    panel.classList.add('open');
+    document.getElementById('close-detail').addEventListener('click', () => panel.classList.remove('open'));
+  }
+
+  function bindEvents() {
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        currentTab = tab.dataset.tab;
+        render();
+      });
     });
-    
-    scriptItem.querySelector('.btn-edit').addEventListener('click', (e) => {
-      const name = e.target.getAttribute('data-name');
-      const command = e.target.getAttribute('data-command');
-      showEditScriptModal(name, command);
+
+    document.querySelectorAll('[data-field]').forEach(input => {
+      input.addEventListener('change', () => {
+        let value = input.value;
+        if (input.dataset.field === 'keywords') {
+          value = input.value.split(',').map(k => k.trim()).filter(Boolean);
+        }
+        vscode.postMessage({ type: 'updateField', field: input.dataset.field, value });
+      });
     });
-    
-    scriptItem.querySelector('.btn-delete').addEventListener('click', (e) => {
-      const name = e.target.getAttribute('data-name');
-      showDeleteScriptConfirmation(name);
+
+    const filterSelect = document.getElementById('dep-type-filter');
+    if (filterSelect) {
+      filterSelect.addEventListener('change', () => {
+        depFilter = filterSelect.value;
+        render();
+      });
+    }
+
+    const searchInput = document.getElementById('npm-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          if (searchInput.value.trim()) {
+            vscode.postMessage({ type: 'searchNpm', query: searchInput.value.trim() });
+          }
+        }, 300);
+      });
+    }
+
+    document.querySelectorAll('.remove-dep').forEach(btn => {
+      btn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'removeDependency', name: btn.dataset.name });
+      });
     });
-  });
-}
 
-// Filter dependencies based on search query
-function filterDependencies(query, type) {
-  const items = document.querySelectorAll(`#${type === 'dependencies' ? 'dependencies-list' : 'dev-dependencies-list'} .dependency-item`);
-  const lowerQuery = query.toLowerCase();
-  
-  items.forEach(item => {
-    const name = item.querySelector('.dependency-name').textContent.toLowerCase();
-    if (name.includes(lowerQuery)) {
-      item.style.display = '';
-    } else {
-      item.style.display = 'none';
-    }
-  });
-}
-
-// Filter scripts based on search query
-function filterScripts(query) {
-  const items = document.querySelectorAll('#scripts-list .script-item');
-  const lowerQuery = query.toLowerCase();
-  
-  items.forEach(item => {
-    const name = item.querySelector('.script-name').textContent.toLowerCase();
-    const command = item.querySelector('.script-command').textContent.toLowerCase();
-    if (name.includes(lowerQuery) || command.includes(lowerQuery)) {
-      item.style.display = '';
-    } else {
-      item.style.display = 'none';
-    }
-  });
-}
-
-// Show add dependency modal
-function showAddDependencyModal() {
-  const modalOverlay = document.getElementById('modal-overlay');
-  const modalTitle = document.getElementById('modal-title');
-  const modalContent = document.getElementById('modal-content');
-  
-  modalTitle.textContent = 'Add Dependency';
-  
-  modalContent.innerHTML = `
-    <div class="form-group">
-      <label for="dep-search">Search NPM Packages</label>
-      <input type="text" id="dep-search" placeholder="Type to search...">
-    </div>
-    <div id="search-results" class="search-results"></div>
-    <div class="form-group">
-      <label for="dep-name">Package Name</label>
-      <input type="text" id="dep-name" placeholder="e.g. react">
-    </div>
-    <div class="form-group">
-      <label for="dep-version">Version</label>
-      <input type="text" id="dep-version" placeholder="e.g. ^17.0.0">
-    </div>
-    <div class="form-group">
-      <label for="dep-type">Dependency Type</label>
-      <select id="dep-type">
-        <option value="dependencies">Regular Dependency</option>
-        <option value="devDependencies">Dev Dependency</option>
-      </select>
-    </div>
-    <div class="form-actions">
-      <button id="btn-add-dependency-confirm" class="btn-primary">Add</button>
-      <button id="btn-add-dependency-cancel" class="btn-secondary">Cancel</button>
-    </div>
-  `;
-  
-  // Show the modal
-  modalOverlay.classList.remove('hidden');
-  
-  // Set up event listeners
-  document.getElementById('dep-search').addEventListener('input', (e) => {
-    const query = e.target.value;
-    if (query.length >= 2) {
-      searchNpmPackages(query);
-    }
-  });
-  
-  document.getElementById('btn-add-dependency-confirm').addEventListener('click', () => {
-    const name = document.getElementById('dep-name').value;
-    const version = document.getElementById('dep-version').value;
-    const type = document.getElementById('dep-type').value;
-    
-    if (name && version) {
-      addDependency(name, version, type);
-      closeModal();
-    } else {
-      showError('Please provide both package name and version');
-    }
-  });
-  
-  document.getElementById('btn-add-dependency-cancel').addEventListener('click', () => {
-    closeModal();
-  });
-}
-
-// Show edit dependency modal
-function showEditDependencyModal(name, version, type) {
-  const modalOverlay = document.getElementById('modal-overlay');
-  const modalTitle = document.getElementById('modal-title');
-  const modalContent = document.getElementById('modal-content');
-  
-  modalTitle.textContent = 'Edit Dependency';
-  
-  modalContent.innerHTML = `
-    <div class="form-group">
-      <label for="edit-dep-name">Package Name</label>
-      <input type="text" id="edit-dep-name" value="${escapeHtml(name)}" readonly>
-    </div>
-    <div class="form-group">
-      <label for="edit-dep-version">Version</label>
-      <input type="text" id="edit-dep-version" value="${escapeHtml(version)}">
-    </div>
-    <div class="form-group">
-      <label for="edit-dep-type">Dependency Type</label>
-      <select id="edit-dep-type">
-        <option value="dependencies" ${type === 'dependencies' ? 'selected' : ''}>Regular Dependency</option>
-        <option value="devDependencies" ${type === 'devDependencies' ? 'selected' : ''}>Dev Dependency</option>
-      </select>
-    </div>
-    <div class="form-actions">
-      <button id="btn-edit-dependency-confirm" class="btn-primary">Update</button>
-      <button id="btn-edit-dependency-cancel" class="btn-secondary">Cancel</button>
-    </div>
-  `;
-  
-  // Show the modal
-  modalOverlay.classList.remove('hidden');
-  
-  // Set up event listeners
-  document.getElementById('btn-edit-dependency-confirm').addEventListener('click', () => {
-    const newVersion = document.getElementById('edit-dep-version').value;
-    const newType = document.getElementById('edit-dep-type').value;
-    
-    if (newVersion) {
-      editDependency(name, newVersion, type, newType);
-      closeModal();
-    } else {
-      showError('Please provide version');
-    }
-  });
-  
-  document.getElementById('btn-edit-dependency-cancel').addEventListener('click', () => {
-    closeModal();
-  });
-}
-
-// Show delete dependency confirmation dialog
-function showDeleteDependencyConfirmation(name, type) {
-  const modalOverlay = document.getElementById('modal-overlay');
-  const modalTitle = document.getElementById('modal-title');
-  const modalContent = document.getElementById('modal-content');
-  
-  modalTitle.textContent = 'Confirm Deletion';
-  
-  modalContent.innerHTML = `
-    <p>Are you sure you want to remove the package "${escapeHtml(name)}"?</p>
-    <div class="form-actions">
-      <button id="btn-delete-dependency-confirm" class="btn-danger">Delete</button>
-      <button id="btn-delete-dependency-cancel" class="btn-secondary">Cancel</button>
-    </div>
-  `;
-  
-  // Show the modal
-  modalOverlay.classList.remove('hidden');
-  
-  // Set up event listeners
-  document.getElementById('btn-delete-dependency-confirm').addEventListener('click', () => {
-    deleteDependency(name, type);
-    closeModal();
-  });
-  
-  document.getElementById('btn-delete-dependency-cancel').addEventListener('click', () => {
-    closeModal();
-  });
-}
-
-// Show add script modal
-function showAddScriptModal() {
-  const modalOverlay = document.getElementById('modal-overlay');
-  const modalTitle = document.getElementById('modal-title');
-  const modalContent = document.getElementById('modal-content');
-  
-  modalTitle.textContent = 'Add Script';
-  
-  modalContent.innerHTML = `
-    <div class="form-group">
-      <label for="script-name">Script Name</label>
-      <input type="text" id="script-name" placeholder="e.g. start">
-    </div>
-    <div class="form-group">
-      <label for="script-command">Command</label>
-      <input type="text" id="script-command" placeholder="e.g. node server.js">
-    </div>
-    <div class="form-actions">
-      <button id="btn-add-script-confirm" class="btn-primary">Add</button>
-      <button id="btn-add-script-cancel" class="btn-secondary">Cancel</button>
-    </div>
-  `;
-  
-  // Show the modal
-  modalOverlay.classList.remove('hidden');
-  
-  // Set up event listeners
-  document.getElementById('btn-add-script-confirm').addEventListener('click', () => {
-    const name = document.getElementById('script-name').value;
-    const command = document.getElementById('script-command').value;
-    
-    if (name && command) {
-      addScript(name, command);
-      closeModal();
-    } else {
-      showError('Please provide both script name and command');
-    }
-  });
-  
-  document.getElementById('btn-add-script-cancel').addEventListener('click', () => {
-    closeModal();
-  });
-}
-
-// Show edit script modal
-function showEditScriptModal(name, command) {
-  const modalOverlay = document.getElementById('modal-overlay');
-  const modalTitle = document.getElementById('modal-title');
-  const modalContent = document.getElementById('modal-content');
-  
-  modalTitle.textContent = 'Edit Script';
-  
-  modalContent.innerHTML = `
-    <div class="form-group">
-      <label for="edit-script-name">Script Name</label>
-      <input type="text" id="edit-script-name" value="${escapeHtml(name)}" readonly>
-    </div>
-    <div class="form-group">
-      <label for="edit-script-command">Command</label>
-      <input type="text" id="edit-script-command" value="${escapeHtml(command)}">
-    </div>
-    <div class="form-actions">
-      <button id="btn-edit-script-confirm" class="btn-primary">Update</button>
-      <button id="btn-edit-script-cancel" class="btn-secondary">Cancel</button>
-    </div>
-  `;
-  
-  // Show the modal
-  modalOverlay.classList.remove('hidden');
-  
-  // Set up event listeners
-  document.getElementById('btn-edit-script-confirm').addEventListener('click', () => {
-    const newCommand = document.getElementById('edit-script-command').value;
-    
-    if (newCommand) {
-      editScript(name, newCommand);
-      closeModal();
-    } else {
-      showError('Please provide command');
-    }
-  });
-  
-  document.getElementById('btn-edit-script-cancel').addEventListener('click', () => {
-    closeModal();
-  });
-}
-
-// Show delete script confirmation dialog
-function showDeleteScriptConfirmation(name) {
-  const modalOverlay = document.getElementById('modal-overlay');
-  const modalTitle = document.getElementById('modal-title');
-  const modalContent = document.getElementById('modal-content');
-  
-  modalTitle.textContent = 'Confirm Deletion';
-  
-  modalContent.innerHTML = `
-    <p>Are you sure you want to remove the script "${escapeHtml(name)}"?</p>
-    <div class="form-actions">
-      <button id="btn-delete-script-confirm" class="btn-danger">Delete</button>
-      <button id="btn-delete-script-cancel" class="btn-secondary">Cancel</button>
-    </div>
-  `;
-  
-  // Show the modal
-  modalOverlay.classList.remove('hidden');
-  
-  // Set up event listeners
-  document.getElementById('btn-delete-script-confirm').addEventListener('click', () => {
-    deleteScript(name);
-    closeModal();
-  });
-  
-  document.getElementById('btn-delete-script-cancel').addEventListener('click', () => {
-    closeModal();
-  });
-}
-
-// Close modal
-function closeModal() {
-  const modalOverlay = document.getElementById('modal-overlay');
-  modalOverlay.classList.add('hidden');
-}
-
-// Update package.json from form input
-function updatePackageJsonFromForm() {
-  if (!packageJson) return;
-  
-  // Update basic info
-  packageJson.name = document.getElementById('package-name').value;
-  packageJson.version = document.getElementById('package-version').value;
-  packageJson.description = document.getElementById('package-description').value;
-  packageJson.author = document.getElementById('package-author').value;
-  packageJson.license = document.getElementById('package-license').value;
-  
-  // Update keywords
-  const keywordsText = document.getElementById('package-keywords').value;
-  packageJson.keywords = keywordsText ? keywordsText.split(',').map(k => k.trim()) : [];
-  
-  // Send the updated package.json to the extension
-  vscode.postMessage({
-    command: 'updatePackageJson',
-    packageJson
-  });
-}
-
-// Add a new dependency
-function addDependency(name, version, type) {
-  if (!packageJson) return;
-  
-  // Initialize the dependency section if it doesn't exist
-  if (!packageJson[type]) {
-    packageJson[type] = {};
-  }
-  
-  // Add the dependency
-  packageJson[type][name] = version;
-  
-  // Send the updated package.json to the extension
-  vscode.postMessage({
-    command: 'updatePackageJson',
-    packageJson
-  });
-  
-  // Update the UI
-  updateDependenciesList(type, packageJson[type]);
-}
-
-// Edit an existing dependency
-function editDependency(name, newVersion, oldType, newType) {
-  if (!packageJson) return;
-  
-  // Remove from old type if type is changing
-  if (oldType !== newType) {
-    if (packageJson[oldType] && packageJson[oldType][name]) {
-      delete packageJson[oldType][name];
-    }
-    
-    // Initialize the new type section if needed
-    if (!packageJson[newType]) {
-      packageJson[newType] = {};
-    }
-  }
-  
-  // Add to new type with new version
-  packageJson[newType][name] = newVersion;
-  
-  // Send the updated package.json to the extension
-  vscode.postMessage({
-    command: 'updatePackageJson',
-    packageJson
-  });
-  
-  // Update the UI
-  updateDependenciesList(oldType, packageJson[oldType] || {});
-  if (oldType !== newType) {
-    updateDependenciesList(newType, packageJson[newType] || {});
-  }
-}
-
-// Delete a dependency
-function deleteDependency(name, type) {
-  if (!packageJson || !packageJson[type]) return;
-  
-  // Remove the dependency
-  delete packageJson[type][name];
-  
-  // Send the updated package.json to the extension
-  vscode.postMessage({
-    command: 'updatePackageJson',
-    packageJson
-  });
-  
-  // Update the UI
-  updateDependenciesList(type, packageJson[type]);
-}
-
-// Add a new script
-function addScript(name, command) {
-  if (!packageJson) return;
-  
-  // Initialize the scripts section if it doesn't exist
-  if (!packageJson.scripts) {
-    packageJson.scripts = {};
-  }
-  
-  // Add the script
-  packageJson.scripts[name] = command;
-  
-  // Send the updated package.json to the extension
-  vscode.postMessage({
-    command: 'updatePackageJson',
-    packageJson
-  });
-  
-  // Update the UI
-  updateScriptsList(packageJson.scripts);
-}
-
-// Edit an existing script
-function editScript(name, newCommand) {
-  if (!packageJson || !packageJson.scripts) return;
-  
-  // Update the script
-  packageJson.scripts[name] = newCommand;
-  
-  // Send the updated package.json to the extension
-  vscode.postMessage({
-    command: 'updatePackageJson',
-    packageJson
-  });
-  
-  // Update the UI
-  updateScriptsList(packageJson.scripts);
-}
-
-// Delete a script
-function deleteScript(name) {
-  if (!packageJson || !packageJson.scripts) return;
-  
-  // Remove the script
-  delete packageJson.scripts[name];
-  
-  // Send the updated package.json to the extension
-  vscode.postMessage({
-    command: 'updatePackageJson',
-    packageJson
-  });
-  
-  // Update the UI
-  updateScriptsList(packageJson.scripts);
-}
-
-// Execute a script
-function executeScript(scriptName) {
-  vscode.postMessage({
-    command: 'executeScript',
-    script: scriptName
-  });
-}
-
-// Search for packages in npm registry
-function searchNpmPackages(query) {
-  vscode.postMessage({
-    command: 'searchNpmPackage',
-    query
-  });
-  
-  // Show loading state
-  document.getElementById('search-results').innerHTML = '<div class="loading">Searching...</div>';
-}
-
-// Update search results in UI
-function updateSearchResults(results) {
-  const resultsElement = document.getElementById('search-results');
-  
-  if (!results || results.length === 0) {
-    resultsElement.innerHTML = '<div class="no-results">No packages found</div>';
-    return;
-  }
-  
-  // Clear previous results
-  resultsElement.innerHTML = '';
-  
-  // Add each result
-  results.forEach(pkg => {
-    const resultItem = document.createElement('div');
-    resultItem.className = 'search-result-item';
-    resultItem.innerHTML = `
-      <div class="result-name">${escapeHtml(pkg.name)} <span class="result-version">${escapeHtml(pkg.version)}</span></div>
-      <div class="result-description">${escapeHtml(pkg.description || '')}</div>
-      <div class="result-meta">
-        <span class="result-author">${escapeHtml(pkg.author || '')}</span>
-        <span class="result-date">${pkg.date ? new Date(pkg.date).toLocaleDateString() : ''}</span>
-      </div>
-    `;
-    
-    // Add event listener to select this package
-    resultItem.addEventListener('click', () => {
-      document.getElementById('dep-name').value = pkg.name;
-      document.getElementById('dep-version').value = `^${pkg.version}`;
-      resultsElement.innerHTML = '';
+    document.querySelectorAll('.move-dep').forEach(btn => {
+      btn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'moveDependency', name: btn.dataset.name, toDev: btn.dataset.toDev === 'true' });
+      });
     });
-    
-    resultsElement.appendChild(resultItem);
-  });
-}
 
-// Show an error message
-function showError(message) {
-  // In a real implementation, this would show a nice error notification
-  console.error(message);
-  alert(message);
-}
+    document.querySelectorAll('.version-input').forEach(input => {
+      input.addEventListener('change', () => {
+        const name = input.dataset.name;
+        const deps = currentData.dependencies || {};
+        const isDev = !(name in deps);
+        vscode.postMessage({ type: 'addDependency', name, version: input.value, isDev });
+      });
+    });
 
-// Show a notification message
-function showNotification(message) {
-  // In a real implementation, this would show a nice notification
-  console.log(message);
-}
+    document.querySelectorAll('.dep-name').forEach(el => {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => {
+        vscode.postMessage({ type: 'getPackageDetails', name: el.dataset.name });
+      });
+    });
 
-// Show loading state
-function showLoadingState() {
-  const app = document.getElementById('app');
-  if (!app) return;
-  
-  // Create loading overlay if it doesn't exist
-  let loadingOverlay = document.getElementById('loading-overlay');
-  if (!loadingOverlay) {
-    loadingOverlay = document.createElement('div');
-    loadingOverlay.id = 'loading-overlay';
-    loadingOverlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: var(--vscode-editor-background);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-    `;
-    loadingOverlay.innerHTML = `
-      <div style="text-align: center;">
-        <div style="margin-bottom: 16px; font-size: 16px;">Loading package.json...</div>
-        <div class="spinner" style="
-          border: 3px solid var(--vscode-editorWidget-border);
-          border-top: 3px solid var(--vscode-progressBar-background);
-          border-radius: 50%;
-          width: 40px;
-          height: 40px;
-          animation: spin 1s linear infinite;
-          margin: 0 auto;
-        "></div>
-      </div>
-    `;
-    app.appendChild(loadingOverlay);
-    
-    // Add spinner animation
-    const style = document.createElement('style');
-    style.textContent = `
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-    `;
-    document.head.appendChild(style);
+    document.querySelectorAll('.run-script').forEach(btn => {
+      btn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'runScript', name: btn.dataset.name });
+      });
+    });
+
+    document.querySelectorAll('.delete-script').forEach(btn => {
+      btn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'removeScript', name: btn.dataset.name });
+      });
+    });
+
+    document.querySelectorAll('.edit-script').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const name = btn.dataset.name;
+        const cmd = btn.dataset.command;
+        const newCmd = prompt('Edit command:', cmd);
+        if (newCmd !== null && newCmd !== cmd) {
+          vscode.postMessage({ type: 'editScript', name, command: newCmd });
+        }
+      });
+    });
+
+    const addScriptBtn = document.getElementById('add-script-btn');
+    if (addScriptBtn) {
+      addScriptBtn.addEventListener('click', () => {
+        const nameInput = document.getElementById('new-script-name');
+        const cmdInput = document.getElementById('new-script-cmd');
+        if (nameInput.value.trim() && cmdInput.value.trim()) {
+          vscode.postMessage({ type: 'addScript', name: nameInput.value.trim(), command: cmdInput.value.trim() });
+          nameInput.value = '';
+          cmdInput.value = '';
+        }
+      });
+    }
+
+    bindSearchResultEvents();
   }
-  loadingOverlay.style.display = 'flex';
-}
 
-// Hide loading state
-function hideLoadingState() {
-  const loadingOverlay = document.getElementById('loading-overlay');
-  if (loadingOverlay) {
-    loadingOverlay.style.display = 'none';
+  function bindSearchResultEvents() {
+    document.querySelectorAll('.add-dep').forEach(btn => {
+      btn.addEventListener('click', () => {
+        vscode.postMessage({
+          type: 'addDependency',
+          name: btn.dataset.name,
+          version: btn.dataset.version,
+          isDev: btn.dataset.dev === 'true'
+        });
+      });
+    });
   }
-}
 
-// HTML escape helper
-function escapeHtml(unsafe) {
-  return unsafe
-    .toString()
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+  function showError(message) {
+    const root = document.getElementById('root');
+    const existing = root.querySelector('.error-message');
+    if (existing) { existing.remove(); }
+    const div = document.createElement('div');
+    div.className = 'error-message';
+    div.textContent = message;
+    root.prepend(div);
+    setTimeout(() => div.remove(), 5000);
+  }
+
+  function escapeHtml(str) {
+    if (typeof str !== 'string') { return ''; }
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function escapeAttr(str) {
+    if (typeof str !== 'string') { return ''; }
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  init();
+})();

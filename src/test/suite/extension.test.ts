@@ -2,38 +2,23 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 
 suite('Extension Test Suite', () => {
-  vscode.window.showInformationMessage('Starting tests...');
-
   test('Extension should be present', () => {
-    assert.ok(vscode.extensions.getExtension('icy-r.package-json-manager'));
+    const ext = vscode.extensions.getExtension('icy-r.package-json-manager');
+    assert.ok(ext, 'Extension should be installed');
   });
 
   test('Extension should activate', async () => {
-    const extension = vscode.extensions.getExtension('icy-r.package-json-manager');
-    if (!extension) {
-      assert.fail('Extension not found');
-      return;
+    const ext = vscode.extensions.getExtension('icy-r.package-json-manager');
+    if (ext && !ext.isActive) {
+      await ext.activate();
     }
-    
-    // Activate the extension if it's not already activated
-    if (!extension.isActive) {
-      await extension.activate();
-    }
-    
-    assert.ok(extension.isActive);
+    assert.ok(ext?.isActive, 'Extension should be active');
   });
 
-  test('Commands should be registered', () => {
-    // Check if the extension commands are registered
-    return vscode.commands.getCommands(true).then((commands) => {
-      // Check for each command the extension should register
-      const hasOpenCommand = commands.includes('packageJsonManager.openPackageJsonEditor');
-      const hasToggleCommand = commands.includes('packageJsonManager.toggleView');
-      const hasGraphCommand = commands.includes('packageJsonManager.showDependencyGraph');
-      
-      assert.ok(hasOpenCommand, 'openPackageJsonEditor command is registered');
-      assert.ok(hasToggleCommand, 'toggleView command is registered');
-      assert.ok(hasGraphCommand, 'showDependencyGraph command is registered');
-    });
+  test('Commands should be registered', async () => {
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes('packageJsonManager.openPackageJsonEditor'));
+    assert.ok(commands.includes('packageJsonManager.toggleView'));
+    assert.ok(commands.includes('packageJsonManager.showDependencyGraph'));
   });
 });
