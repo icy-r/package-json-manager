@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
       - "v*"
   pull_request:
     branches: [main, master]
-  workflow_dispatch: # Allows manual triggering of the workflow
+  workflow_dispatch:
 
 jobs:
   build:
@@ -74,12 +74,12 @@ jobs:
           path: "*.vsix"
           if-no-files-found: error
 
+  # Fallback: manual tag-based release (use release.yml for automated releases)
   release:
-    name: Release to Marketplace & GitHub
+    name: Release (manual tag)
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    # Add permissions needed for creating releases
     permissions:
       contents: write
       packages: write
@@ -96,19 +96,6 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
@@ -121,28 +108,15 @@ jobs:
         id: vsix-name
         run: echo "VSIX_NAME=$(ls *.vsix)" >> $GITHUB_OUTPUT
 
-      - name: Get Version from Tag
-        id: get-version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Verify Package Version
-        run: |
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          if [ "v$PKG_VERSION" != "${{ github.ref_name }}" ]; then
-            echo "Error: Tag version (${{ github.ref_name }}) does not match package.json version (v$PKG_VERSION)"
-            exit 1
-          fi
-
       - name: Publish to Visual Studio Marketplace
         run: pnpm dlx vsce publish --packagePath ${{ steps.vsix-name.outputs.VSIX_NAME }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Create GitHub Release
-        id: create-release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          name: Release v${{ steps.get-version.outputs.VERSION }}
+          name: Release ${{ github.ref_name }}
           files: ${{ steps.vsix-name.outputs.VSIX_NAME }}
           draft: false
           prerelease: false
