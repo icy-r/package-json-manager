@@ -73,8 +73,22 @@
     const keywords = Array.isArray(data.keywords) ? data.keywords : [];
     const repoUrl = typeof data.repository === 'object' ? (data.repository?.url || '') : (data.repository || '');
     const bugsUrl = typeof data.bugs === 'object' ? (data.bugs?.url || '') : (data.bugs || '');
+    const fundingUrl = typeof data.funding === 'object' ? (data.funding?.url || '') : (data.funding || '');
     const enginesNode = typeof data.engines === 'object' ? (data.engines?.node || '') : '';
     const enginesVscode = typeof data.engines === 'object' ? (data.engines?.vscode || '') : '';
+    const filesArr = Array.isArray(data.files) ? data.files : [];
+
+    const knownFields = new Set([
+      'name', 'version', 'displayName', 'publisher', 'description', 'author', 'contributors',
+      'license', 'homepage', 'repository', 'bugs', 'funding', 'main', 'module', 'types', 'typings',
+      'browser', 'bin', 'exports', 'imports', 'type', 'packageManager', 'engines', 'files',
+      'keywords', 'private', 'sideEffects', 'scripts', 'dependencies', 'devDependencies',
+      'peerDependencies', 'peerDependenciesMeta', 'optionalDependencies', 'bundleDependencies',
+      'overrides', 'config', 'os', 'cpu', 'workspaces', 'man', 'directories', 'icon',
+      'galleryBanner', 'categories', 'activationEvents', 'contributes', 'menus', 'pnpm'
+    ]);
+
+    const extraFields = Object.keys(data).filter(k => !knownFields.has(k));
 
     return `
       <div class="section-label">Identity</div>
@@ -98,32 +112,50 @@
           <label>Repository URL</label>
           <input type="text" data-field="repository" data-complex="true" value="${attr(repoUrl)}">
         </div>
-        <div class="form-group full-width">
+        <div class="form-group">
           <label>Bug Tracker URL</label>
           <input type="text" data-field="bugs" data-complex="true" value="${attr(bugsUrl)}">
         </div>
+        <div class="form-group">
+          <label>Funding URL</label>
+          <input type="text" data-field="funding" data-complex="true" value="${attr(fundingUrl)}">
+        </div>
       </div>
 
-      <div class="section-label">Entry Points & Engines</div>
+      <div class="section-label">Entry Points & Module</div>
       <div class="form-grid">
         ${field('main', 'Main', data.main)}
-        ${field('module', 'Module', data.module)}
+        ${field('module', 'Module (ESM)', data.module)}
         ${field('types', 'Types', data.types || data.typings)}
         ${field('browser', 'Browser', data.browser)}
-        <div class="form-group">
-          <label>Node Engine</label>
-          <input type="text" data-field="engines.node" data-engine="true" value="${attr(enginesNode)}">
-        </div>
-        <div class="form-group">
-          <label>VS Code Engine</label>
-          <input type="text" data-field="engines.vscode" data-engine="true" value="${attr(enginesVscode)}">
-        </div>
-        ${field('packageManager', 'Package Manager', data.packageManager)}
         ${field('type', 'Module Type', data.type)}
+        ${field('packageManager', 'Package Manager', data.packageManager)}
+        ${typeof data.bin === 'string' ? field('bin', 'Bin', data.bin) : ''}
       </div>
 
-      <div class="section-label">Metadata</div>
+      <div class="section-label">Engines</div>
       <div class="form-grid">
+        <div class="form-group">
+          <label>Node</label>
+          <input type="text" data-field="engines.node" data-engine="true" value="${attr(enginesNode)}" placeholder="e.g. >=18.0.0">
+        </div>
+        <div class="form-group">
+          <label>VS Code</label>
+          <input type="text" data-field="engines.vscode" data-engine="true" value="${attr(enginesVscode)}" placeholder="e.g. ^1.75.0">
+        </div>
+      </div>
+
+      <div class="section-label">Publish & Files</div>
+      <div class="form-grid">
+        ${field('private', 'Private', data.private !== undefined ? String(data.private) : '')}
+        ${field('sideEffects', 'Side Effects', data.sideEffects !== undefined ? String(data.sideEffects) : '')}
+        <div class="form-group full-width">
+          <label>Files (included in package)</label>
+          <div class="keywords-container" id="files-container">
+            ${filesArr.map(f => `<span class="keyword-tag">${esc(f)}<button class="remove-file" data-file="${attr(f)}">×</button></span>`).join('')}
+            <input type="text" class="keywords-input" id="file-input" placeholder="${filesArr.length ? '' : 'Type and press Enter to add...'}" />
+          </div>
+        </div>
         <div class="form-group full-width">
           <label>Keywords</label>
           <div class="keywords-container" id="keywords-container">
@@ -131,9 +163,48 @@
             <input type="text" class="keywords-input" id="keyword-input" placeholder="${keywords.length ? '' : 'Type and press Enter to add...'}" />
           </div>
         </div>
-        ${field('private', 'Private', data.private !== undefined ? String(data.private) : '')}
-        ${field('sideEffects', 'Side Effects', data.sideEffects !== undefined ? String(data.sideEffects) : '')}
       </div>
+
+      ${data.peerDependencies ? `
+        <div class="section-label">Peer Dependencies</div>
+        <div class="readonly-json">${renderJsonBlock(data.peerDependencies)}</div>
+      ` : ''}
+
+      ${data.optionalDependencies ? `
+        <div class="section-label">Optional Dependencies</div>
+        <div class="readonly-json">${renderJsonBlock(data.optionalDependencies)}</div>
+      ` : ''}
+
+      ${data.overrides || data.pnpm?.overrides ? `
+        <div class="section-label">Overrides</div>
+        <div class="readonly-json">${renderJsonBlock(data.overrides || data.pnpm?.overrides)}</div>
+      ` : ''}
+
+      ${data.exports ? `
+        <div class="section-label">Exports</div>
+        <div class="readonly-json">${renderJsonBlock(data.exports)}</div>
+      ` : ''}
+
+      ${typeof data.bin === 'object' ? `
+        <div class="section-label">Bin</div>
+        <div class="readonly-json">${renderJsonBlock(data.bin)}</div>
+      ` : ''}
+
+      ${data.workspaces ? `
+        <div class="section-label">Workspaces</div>
+        <div class="readonly-json">${renderJsonBlock(data.workspaces)}</div>
+      ` : ''}
+
+      ${extraFields.length ? `
+        <div class="section-label">Other Fields</div>
+        ${extraFields.map(k => {
+          const val = data[k];
+          if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') {
+            return `<div class="form-grid"><div class="form-group full-width">${field(k, k, String(val))}</div></div>`;
+          }
+          return `<div class="readonly-json-section"><div class="readonly-json-label">${esc(k)}</div><div class="readonly-json">${renderJsonBlock(val)}</div></div>`;
+        }).join('')}
+      ` : ''}
 
       <div class="form-group full-width add-field-section">
         <details>
@@ -149,6 +220,15 @@
 
   function field(key, label, value) {
     return `<div class="form-group"><label>${label}</label><input type="text" data-field="${key}" value="${attr(value || '')}"></div>`;
+  }
+
+  function renderJsonBlock(obj) {
+    try {
+      const json = JSON.stringify(obj, null, 2);
+      return `<pre class="json-preview">${esc(json)}</pre>`;
+    } catch {
+      return '<span class="json-preview">[complex value]</span>';
+    }
   }
 
   // ── Dependencies Tab ──
@@ -376,9 +456,11 @@
 
         if (isComplex) {
           if (fieldName === 'repository') {
-            vscode.postMessage({ type: 'updateField', field: 'repository', value: { type: 'git', url: input.value } });
+            vscode.postMessage({ type: 'updateField', field: 'repository', value: input.value ? { type: 'git', url: input.value } : undefined });
           } else if (fieldName === 'bugs') {
-            vscode.postMessage({ type: 'updateField', field: 'bugs', value: { url: input.value } });
+            vscode.postMessage({ type: 'updateField', field: 'bugs', value: input.value ? { url: input.value } : undefined });
+          } else if (fieldName === 'funding') {
+            vscode.postMessage({ type: 'updateField', field: 'funding', value: input.value || undefined });
           }
         } else if (isEngine) {
           const engineKey = fieldName.split('.')[1];
@@ -447,6 +529,40 @@
     const kwContainer = document.getElementById('keywords-container');
     if (kwContainer) {
       kwContainer.addEventListener('click', () => kwInput?.focus());
+    }
+
+    // Files array
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) {
+      fileInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && fileInput.value.trim()) {
+          e.preventDefault();
+          const f = fileInput.value.trim();
+          const current = Array.isArray(data.files) ? [...data.files] : [];
+          if (!current.includes(f)) {
+            current.push(f);
+            vscode.postMessage({ type: 'updateField', field: 'files', value: current });
+          }
+          fileInput.value = '';
+        }
+        if (e.key === 'Backspace' && !fileInput.value) {
+          const current = Array.isArray(data.files) ? [...data.files] : [];
+          if (current.length) { current.pop(); vscode.postMessage({ type: 'updateField', field: 'files', value: current }); }
+        }
+      });
+    }
+
+    document.querySelectorAll('.remove-file').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const f = btn.dataset.file;
+        const current = (data.files || []).filter(x => x !== f);
+        vscode.postMessage({ type: 'updateField', field: 'files', value: current.length ? current : undefined });
+      });
+    });
+
+    const filesContainer = document.getElementById('files-container');
+    if (filesContainer) {
+      filesContainer.addEventListener('click', () => fileInput?.focus());
     }
 
     // Search mode toggle

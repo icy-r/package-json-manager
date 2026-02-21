@@ -39,11 +39,19 @@
       },
       {
         "command": "packageJsonManager.toggleView",
-        "title": "Toggle between visual editor and text editor"
+        "title": "Toggle between visual editor and text editor",
+        "icon": {
+          "light": "media/toggle-light.svg",
+          "dark": "media/toggle-dark.svg"
+        }
       },
       {
         "command": "packageJsonManager.showDependencyGraph",
-        "title": "Show Dependency Graph"
+        "title": "Show Dependency Graph",
+        "icon": {
+          "light": "media/graph-light.svg",
+          "dark": "media/graph-dark.svg"
+        }
       }
     ],
     "menus": {
@@ -161,6 +169,16 @@
     "theme": "dark"
   },
   "author": "icy-r",
+  "contributors": [
+    {
+      "name": "Max (maxoiduss)",
+      "url": "https://github.com/maxoiduss"
+    },
+    {
+      "name": "Cyrus (cyrus123456)",
+      "url": "https://github.com/cyrus123456"
+    }
+  ],
   "license": "MIT",
   "pnpm": {
     "overrides": {

@@ -772,3 +772,35 @@ details[open] .add-field-toggle::before { content: '− '; }
 }
 
 .add-field-form .form-group { margin-bottom: 0; }
+
+/* ── JSON Preview (read-only complex fields) ── */
+.readonly-json {
+  margin-bottom: 12px;
+}
+
+.readonly-json-section {
+  margin-bottom: 12px;
+}
+
+.readonly-json-label {
+  font-size: 0.8em;
+  font-weight: 500;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+
+.json-preview {
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  font-family: var(--mono-font);
+  font-size: 0.85em;
+  line-height: 1.5;
+  overflow-x: auto;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre;
+  color: var(--input-fg);
+  opacity: 0.8;
+}
