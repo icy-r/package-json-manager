@@ -10,6 +10,7 @@ export interface NpmSearchResult {
   description: string;
   author?: { name: string };
   links?: { npm?: string; homepage?: string; repository?: string };
+  score: number;
 }
 
 export interface NpmPackageDetails {
@@ -38,8 +39,12 @@ export class NpmRegistryService {
       throw new NpmRegistryError(`npm search failed: HTTP ${response.status}`);
     }
 
-    const data = (await response.json()) as { objects: { package: NpmSearchResult }[] };
-    return data.objects.map(o => o.package);
+    const data = (await response.json()) as {
+      objects: { package: NpmSearchResult; score: { final: number } }[];
+    };
+    return data.objects
+      .map(o => ({ ...o.package, score: o.score.final }))
+      .sort((a, b) => b.score - a.score);
   }
 
   async getPackageDetails(name: string): Promise<NpmPackageDetails> {

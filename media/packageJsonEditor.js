@@ -5,6 +5,9 @@
   let depFilter = 'all';
   let searchDebounce = null;
   let editingScript = null;
+  let searchMode = 'local'; // 'local' = filter installed, 'npm' = search registry
+  let npmResults = null;
+  let localSearchTerm = '';
 
   function init() {
     vscode.postMessage({ type: 'ready' });
@@ -22,7 +25,8 @@
         }
         break;
       case 'searchResults':
-        renderSearchResults(msg.results);
+        npmResults = msg.results;
+        renderNpmResults();
         break;
       case 'packageDetails':
         renderDetailPanel(msg.details);
@@ -121,13 +125,17 @@
     let list = depFilter === 'regular' ? deps : depFilter === 'dev' ? devDeps : [...deps, ...devDeps];
     list.sort((a, b) => a.name.localeCompare(b.name));
 
+    if (localSearchTerm && searchMode === 'local') {
+      list = list.filter(d => d.name.toLowerCase().includes(localSearchTerm.toLowerCase()));
+    }
+
     const total = deps.length + devDeps.length;
 
     const items = list.length === 0
-      ? `<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">No dependencies found</div><div class="empty-hint">Search npm below to add packages</div></div>`
+      ? `<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">${localSearchTerm ? 'No matching packages' : 'No dependencies found'}</div><div class="empty-hint">${localSearchTerm ? 'Try a different search or add from npm' : 'Switch to npm search to add packages'}</div></div>`
       : list.map(d => `
         <div class="dep-item">
-          <span class="dep-name" data-name="${attr(d.name)}">${esc(d.name)}</span>
+          <span class="dep-name" data-name="${attr(d.name)}">${highlightMatch(d.name, localSearchTerm)}</span>
           <div class="dep-version"><input value="${attr(d.version)}" data-dep-name="${attr(d.name)}" data-dep-type="${d.type}"></div>
           <span class="dep-type-badge ${d.type}">${d.type === 'dep' ? 'prod' : 'dev'}</span>
           <div class="dep-actions">
@@ -136,24 +144,97 @@
           </div>
         </div>`).join('');
 
+    const isNpmMode = searchMode === 'npm';
+
     return `
-      <div class="search-section" style="border-top:none;margin-top:0;padding-top:0;margin-bottom:20px">
-        <h4>Add Package</h4>
+      <div class="dep-search-bar">
         <div class="search-input-wrapper">
           <span class="search-icon">⌕</span>
-          <input type="text" id="npm-search" placeholder="Search npm registry..." autocomplete="off">
+          <input type="text" id="dep-search" placeholder="${isNpmMode ? 'Search npm registry...' : 'Filter installed packages...'}" autocomplete="off" value="${attr(isNpmMode ? '' : localSearchTerm)}">
+          ${(localSearchTerm || isNpmMode) ? '<button class="search-clear" id="search-clear">×</button>' : ''}
         </div>
-        <div id="search-results" class="search-results"></div>
+        <div class="search-mode-toggle">
+          <button class="btn ${isNpmMode ? 'btn-secondary' : 'btn-primary'} btn-sm" id="mode-local" title="Filter installed packages">Installed</button>
+          <button class="btn ${isNpmMode ? 'btn-primary' : 'btn-secondary'} btn-sm" id="mode-npm" title="Search npm registry">+ npm</button>
+        </div>
       </div>
+      ${isNpmMode ? '<div id="npm-results-container" class="npm-results-container"></div>' : ''}
       <div class="dep-toolbar">
         <select id="dep-filter">
           <option value="all" ${depFilter === 'all' ? 'selected' : ''}>All</option>
           <option value="regular" ${depFilter === 'regular' ? 'selected' : ''}>Production</option>
           <option value="dev" ${depFilter === 'dev' ? 'selected' : ''}>Development</option>
         </select>
-        <span class="dep-count">${total} package${total !== 1 ? 's' : ''}</span>
+        <span class="dep-count">${list.length}${localSearchTerm ? ` of ${total}` : ''} package${total !== 1 ? 's' : ''}</span>
       </div>
       <div class="dep-list">${items}</div>`;
+  }
+
+  function highlightMatch(text, term) {
+    if (!term) { return esc(text); }
+    const idx = text.toLowerCase().indexOf(term.toLowerCase());
+    if (idx === -1) { return esc(text); }
+    return esc(text.slice(0, idx)) + '<mark>' + esc(text.slice(idx, idx + term.length)) + '</mark>' + esc(text.slice(idx + term.length));
+  }
+
+  function renderNpmResults() {
+    const container = document.getElementById('npm-results-container');
+    if (!container) { return; }
+
+    if (!npmResults) {
+      container.innerHTML = '';
+      return;
+    }
+
+    if (npmResults.length === 0) {
+      container.innerHTML = '<div class="npm-results"><div class="empty-state" style="padding:16px"><div class="empty-text">No packages found</div></div></div>';
+      return;
+    }
+
+    const existingDeps = new Set([
+      ...Object.keys(data.dependencies || {}),
+      ...Object.keys(data.devDependencies || {})
+    ]);
+
+    container.innerHTML = `
+      <div class="npm-results">
+        <div class="npm-results-header">
+          <span>${npmResults.length} results</span>
+          <button class="btn btn-ghost btn-sm" id="close-npm-results">Dismiss</button>
+        </div>
+        ${npmResults.map(r => {
+          const isInstalled = existingDeps.has(r.name);
+          return `
+            <div class="npm-result-item ${isInstalled ? 'installed' : ''}">
+              <div class="npm-result-info">
+                <div class="npm-result-name">
+                  ${esc(r.name)}
+                  <span class="npm-result-version">${esc(r.version)}</span>
+                  ${isInstalled ? '<span class="installed-badge">installed</span>' : ''}
+                </div>
+                <div class="npm-result-desc">${esc(r.description || '')}</div>
+              </div>
+              ${isInstalled ? '' : `
+                <div class="npm-result-actions">
+                  <button class="btn btn-primary btn-sm add-npm-dep" data-name="${attr(r.name)}" data-version="^${attr(r.version)}" data-dev="false">+ prod</button>
+                  <button class="btn btn-secondary btn-sm add-npm-dep" data-name="${attr(r.name)}" data-version="^${attr(r.version)}" data-dev="true">+ dev</button>
+                </div>
+              `}
+            </div>`;
+        }).join('')}
+      </div>`;
+
+    container.querySelectorAll('.add-npm-dep').forEach(btn => {
+      btn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'addDependency', name: btn.dataset.name, version: btn.dataset.version, isDev: btn.dataset.dev === 'true' });
+        showToast(`Added ${btn.dataset.name}`, 'success');
+      });
+    });
+
+    document.getElementById('close-npm-results')?.addEventListener('click', () => {
+      npmResults = null;
+      container.innerHTML = '';
+    });
   }
 
   // ── Scripts Tab ──
@@ -200,36 +281,6 @@
         <button class="btn btn-primary" id="add-script-btn">Add</button>
       </div>
       <div class="script-list">${items}</div>`;
-  }
-
-  // ── Search Results ──
-  function renderSearchResults(results) {
-    const container = document.getElementById('search-results');
-    if (!container) { return; }
-
-    if (!results || results.length === 0) {
-      container.innerHTML = '<div class="empty-state" style="padding:16px"><div class="empty-text">No packages found</div></div>';
-      return;
-    }
-
-    container.innerHTML = results.map(r => `
-      <div class="search-result-item">
-        <div class="search-result-info">
-          <div class="name">${esc(r.name)} <span class="version">${esc(r.version)}</span></div>
-          <div class="desc">${esc(r.description || '')}</div>
-        </div>
-        <div class="search-result-actions">
-          <button class="btn btn-primary btn-sm add-dep" data-name="${attr(r.name)}" data-version="^${attr(r.version)}" data-dev="false">+ prod</button>
-          <button class="btn btn-secondary btn-sm add-dep" data-name="${attr(r.name)}" data-version="^${attr(r.version)}" data-dev="true">+ dev</button>
-        </div>
-      </div>`).join('');
-
-    container.querySelectorAll('.add-dep').forEach(btn => {
-      btn.addEventListener('click', () => {
-        vscode.postMessage({ type: 'addDependency', name: btn.dataset.name, version: btn.dataset.version, isDev: btn.dataset.dev === 'true' });
-        showToast(`Added ${btn.dataset.name}`, 'success');
-      });
-    });
   }
 
   // ── Detail Panel ──
@@ -288,7 +339,6 @@
       input.addEventListener('change', () => {
         const fieldName = input.dataset.field;
         const isComplex = input.dataset.complex === 'true';
-
         if (isComplex) {
           if (fieldName === 'repository') {
             vscode.postMessage({ type: 'updateField', field: 'repository', value: { type: 'git', url: input.value } });
@@ -353,24 +403,66 @@
       kwContainer.addEventListener('click', () => kwInput?.focus());
     }
 
+    // Search mode toggle
+    document.getElementById('mode-local')?.addEventListener('click', () => {
+      searchMode = 'local';
+      npmResults = null;
+      render();
+    });
+
+    document.getElementById('mode-npm')?.addEventListener('click', () => {
+      searchMode = 'npm';
+      localSearchTerm = '';
+      render();
+      document.getElementById('dep-search')?.focus();
+    });
+
+    document.getElementById('search-clear')?.addEventListener('click', () => {
+      localSearchTerm = '';
+      npmResults = null;
+      if (searchMode === 'npm') { searchMode = 'local'; }
+      render();
+    });
+
+    // Dep search
+    const depSearch = document.getElementById('dep-search');
+    if (depSearch) {
+      depSearch.addEventListener('input', () => {
+        clearTimeout(searchDebounce);
+        const q = depSearch.value.trim();
+
+        if (searchMode === 'local') {
+          localSearchTerm = q;
+          render();
+          const el = document.getElementById('dep-search');
+          if (el) { el.focus(); el.setSelectionRange(q.length, q.length); }
+        } else {
+          if (!q) { npmResults = null; renderNpmResults(); return; }
+          searchDebounce = setTimeout(() => {
+            const container = document.getElementById('npm-results-container');
+            if (container) {
+              container.innerHTML = '<div class="npm-results"><div class="search-loading"><div class="spinner"></div>Searching npm...</div></div>';
+            }
+            vscode.postMessage({ type: 'searchNpm', query: q });
+          }, 400);
+        }
+      });
+
+      depSearch.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          depSearch.value = '';
+          localSearchTerm = '';
+          npmResults = null;
+          if (searchMode === 'npm') { searchMode = 'local'; }
+          render();
+        }
+      });
+    }
+
     // Dep filter
     const filterEl = document.getElementById('dep-filter');
     if (filterEl) {
       filterEl.addEventListener('change', () => { depFilter = filterEl.value; render(); });
-    }
-
-    // npm search
-    const searchEl = document.getElementById('npm-search');
-    if (searchEl) {
-      searchEl.addEventListener('input', () => {
-        clearTimeout(searchDebounce);
-        const q = searchEl.value.trim();
-        if (!q) { document.getElementById('search-results').innerHTML = ''; return; }
-        searchDebounce = setTimeout(() => {
-          document.getElementById('search-results').innerHTML = '<div class="search-loading"><div class="spinner"></div>Searching...</div>';
-          vscode.postMessage({ type: 'searchNpm', query: q });
-        }, 350);
-      });
     }
 
     // Dep actions
@@ -405,16 +497,12 @@
       btn.addEventListener('click', () => vscode.postMessage({ type: 'removeScript', name: btn.dataset.name }));
     });
 
-    // Inline script editing
     document.querySelectorAll('.edit-script').forEach(btn => {
       btn.addEventListener('click', () => {
         editingScript = btn.dataset.name;
         render();
         const editInput = document.getElementById('edit-script-input');
-        if (editInput) {
-          editInput.focus();
-          editInput.setSelectionRange(editInput.value.length, editInput.value.length);
-        }
+        if (editInput) { editInput.focus(); editInput.setSelectionRange(editInput.value.length, editInput.value.length); }
       });
     });
 
@@ -436,9 +524,8 @@
     if (editInput) {
       editInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
-          const name = editInput.dataset.name;
           if (editInput.value.trim()) {
-            vscode.postMessage({ type: 'editScript', name, command: editInput.value.trim() });
+            vscode.postMessage({ type: 'editScript', name: editInput.dataset.name, command: editInput.value.trim() });
           }
           editingScript = null;
         }
@@ -458,14 +545,6 @@
         }
       });
     }
-
-    // Add dep from search
-    document.querySelectorAll('.add-dep').forEach(btn => {
-      btn.addEventListener('click', () => {
-        vscode.postMessage({ type: 'addDependency', name: btn.dataset.name, version: btn.dataset.version, isDev: btn.dataset.dev === 'true' });
-        showToast(`Added ${btn.dataset.name}`, 'success');
-      });
-    });
   }
 
   // ── Toast Notifications ──
