@@ -4,7 +4,7 @@
   let activeTab = 'overview';
   let depFilter = 'all';
   let searchDebounce = null;
-  let isSearching = false;
+  let editingScript = null;
 
   function init() {
     vscode.postMessage({ type: 'ready' });
@@ -22,14 +22,12 @@
         }
         break;
       case 'searchResults':
-        isSearching = false;
         renderSearchResults(msg.results);
         break;
       case 'packageDetails':
         renderDetailPanel(msg.details);
         break;
       case 'error':
-        isSearching = false;
         showToast(msg.message, 'error');
         break;
     }
@@ -69,6 +67,8 @@
   function renderOverview() {
     const authorVal = typeof data.author === 'object' ? (data.author?.name || '') : (data.author || '');
     const keywords = Array.isArray(data.keywords) ? data.keywords : [];
+    const repoUrl = typeof data.repository === 'object' ? (data.repository?.url || '') : (data.repository || '');
+    const bugsUrl = typeof data.bugs === 'object' ? (data.bugs?.url || '') : (data.bugs || '');
 
     return `
       <div class="form-grid">
@@ -83,11 +83,29 @@
         ${field('homepage', 'Homepage', data.homepage)}
         ${field('main', 'Entry Point', data.main)}
         <div class="form-group full-width">
+          <label>Repository URL</label>
+          <input type="text" data-field="repository" data-complex="true" value="${attr(repoUrl)}">
+        </div>
+        <div class="form-group full-width">
+          <label>Bug Tracker URL</label>
+          <input type="text" data-field="bugs" data-complex="true" value="${attr(bugsUrl)}">
+        </div>
+        <div class="form-group full-width">
           <label>Keywords</label>
           <div class="keywords-container" id="keywords-container">
             ${keywords.map(k => `<span class="keyword-tag">${esc(k)}<button class="remove-keyword" data-keyword="${attr(k)}">×</button></span>`).join('')}
             <input type="text" class="keywords-input" id="keyword-input" placeholder="${keywords.length ? '' : 'Type and press Enter to add...'}" />
           </div>
+        </div>
+        <div class="form-group full-width add-field-section">
+          <details>
+            <summary class="add-field-toggle">Add custom field</summary>
+            <div class="add-field-form">
+              <div class="form-group"><label>Field Name</label><input type="text" id="custom-field-name" placeholder="e.g. funding"></div>
+              <div class="form-group"><label>Value</label><input type="text" id="custom-field-value" placeholder="Value"></div>
+              <button class="btn btn-primary btn-sm" id="add-custom-field">Add Field</button>
+            </div>
+          </details>
         </div>
       </div>`;
   }
@@ -119,6 +137,14 @@
         </div>`).join('');
 
     return `
+      <div class="search-section" style="border-top:none;margin-top:0;padding-top:0;margin-bottom:20px">
+        <h4>Add Package</h4>
+        <div class="search-input-wrapper">
+          <span class="search-icon">⌕</span>
+          <input type="text" id="npm-search" placeholder="Search npm registry..." autocomplete="off">
+        </div>
+        <div id="search-results" class="search-results"></div>
+      </div>
       <div class="dep-toolbar">
         <select id="dep-filter">
           <option value="all" ${depFilter === 'all' ? 'selected' : ''}>All</option>
@@ -127,15 +153,7 @@
         </select>
         <span class="dep-count">${total} package${total !== 1 ? 's' : ''}</span>
       </div>
-      <div class="dep-list">${items}</div>
-      <div class="search-section">
-        <h4>Add Package</h4>
-        <div class="search-input-wrapper">
-          <span class="search-icon">⌕</span>
-          <input type="text" id="npm-search" placeholder="Search npm registry..." autocomplete="off">
-        </div>
-        <div id="search-results" class="search-results"></div>
-      </div>`;
+      <div class="dep-list">${items}</div>`;
   }
 
   // ── Scripts Tab ──
@@ -144,16 +162,30 @@
 
     const items = scripts.length === 0
       ? `<div class="empty-state"><div class="empty-icon">⚡</div><div class="empty-text">No scripts defined</div><div class="empty-hint">Add a script using the form above</div></div>`
-      : scripts.map(([name, cmd]) => `
-        <div class="script-item">
-          <span class="script-name">${esc(name)}</span>
-          <span class="script-command" title="${attr(cmd)}">${esc(cmd)}</span>
-          <div class="script-actions">
-            <button class="btn btn-primary btn-sm run-script" data-name="${attr(name)}" title="Run script">▶ Run</button>
-            <button class="btn btn-ghost btn-sm btn-icon edit-script" data-name="${attr(name)}" data-command="${attr(cmd)}" title="Edit">✎</button>
-            <button class="btn btn-danger btn-sm btn-icon delete-script" data-name="${attr(name)}" title="Delete">×</button>
-          </div>
-        </div>`).join('');
+      : scripts.map(([name, cmd]) => {
+        const isEditing = editingScript === name;
+        if (isEditing) {
+          return `
+            <div class="script-item script-editing">
+              <span class="script-name">${esc(name)}</span>
+              <input type="text" class="script-edit-input" id="edit-script-input" value="${attr(cmd)}" data-name="${attr(name)}">
+              <div class="script-actions" style="opacity:1">
+                <button class="btn btn-primary btn-sm save-script-edit" data-name="${attr(name)}">Save</button>
+                <button class="btn btn-ghost btn-sm cancel-script-edit">Cancel</button>
+              </div>
+            </div>`;
+        }
+        return `
+          <div class="script-item">
+            <span class="script-name">${esc(name)}</span>
+            <span class="script-command" title="${attr(cmd)}">${esc(cmd)}</span>
+            <div class="script-actions">
+              <button class="btn btn-primary btn-sm run-script" data-name="${attr(name)}" title="Run script">▶ Run</button>
+              <button class="btn btn-ghost btn-sm btn-icon edit-script" data-name="${attr(name)}" title="Edit">✎</button>
+              <button class="btn btn-danger btn-sm btn-icon delete-script" data-name="${attr(name)}" title="Delete">×</button>
+            </div>
+          </div>`;
+      }).join('');
 
     return `
       <div class="script-add-form">
@@ -254,9 +286,35 @@
     document.querySelectorAll('[data-field]').forEach(input => {
       if (input.classList.contains('keywords-input')) { return; }
       input.addEventListener('change', () => {
-        vscode.postMessage({ type: 'updateField', field: input.dataset.field, value: input.value });
+        const fieldName = input.dataset.field;
+        const isComplex = input.dataset.complex === 'true';
+
+        if (isComplex) {
+          if (fieldName === 'repository') {
+            vscode.postMessage({ type: 'updateField', field: 'repository', value: { type: 'git', url: input.value } });
+          } else if (fieldName === 'bugs') {
+            vscode.postMessage({ type: 'updateField', field: 'bugs', value: { url: input.value } });
+          }
+        } else {
+          vscode.postMessage({ type: 'updateField', field: fieldName, value: input.value });
+        }
       });
     });
+
+    // Custom field
+    const addFieldBtn = document.getElementById('add-custom-field');
+    if (addFieldBtn) {
+      addFieldBtn.addEventListener('click', () => {
+        const nameEl = document.getElementById('custom-field-name');
+        const valueEl = document.getElementById('custom-field-value');
+        if (nameEl.value.trim()) {
+          vscode.postMessage({ type: 'updateField', field: nameEl.value.trim(), value: valueEl.value });
+          showToast(`Added field: ${nameEl.value.trim()}`, 'success');
+          nameEl.value = '';
+          valueEl.value = '';
+        }
+      });
+    }
 
     // Keywords
     const kwInput = document.getElementById('keyword-input');
@@ -309,7 +367,6 @@
         const q = searchEl.value.trim();
         if (!q) { document.getElementById('search-results').innerHTML = ''; return; }
         searchDebounce = setTimeout(() => {
-          isSearching = true;
           document.getElementById('search-results').innerHTML = '<div class="search-loading"><div class="spinner"></div>Searching...</div>';
           vscode.postMessage({ type: 'searchNpm', query: q });
         }, 350);
@@ -348,14 +405,46 @@
       btn.addEventListener('click', () => vscode.postMessage({ type: 'removeScript', name: btn.dataset.name }));
     });
 
+    // Inline script editing
     document.querySelectorAll('.edit-script').forEach(btn => {
       btn.addEventListener('click', () => {
-        const newCmd = prompt('Edit command:', btn.dataset.command);
-        if (newCmd !== null && newCmd !== btn.dataset.command) {
-          vscode.postMessage({ type: 'editScript', name: btn.dataset.name, command: newCmd });
+        editingScript = btn.dataset.name;
+        render();
+        const editInput = document.getElementById('edit-script-input');
+        if (editInput) {
+          editInput.focus();
+          editInput.setSelectionRange(editInput.value.length, editInput.value.length);
         }
       });
     });
+
+    document.querySelectorAll('.save-script-edit').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('edit-script-input');
+        if (input && input.value.trim()) {
+          vscode.postMessage({ type: 'editScript', name: btn.dataset.name, command: input.value.trim() });
+        }
+        editingScript = null;
+      });
+    });
+
+    document.querySelectorAll('.cancel-script-edit').forEach(btn => {
+      btn.addEventListener('click', () => { editingScript = null; render(); });
+    });
+
+    const editInput = document.getElementById('edit-script-input');
+    if (editInput) {
+      editInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          const name = editInput.dataset.name;
+          if (editInput.value.trim()) {
+            vscode.postMessage({ type: 'editScript', name, command: editInput.value.trim() });
+          }
+          editingScript = null;
+        }
+        if (e.key === 'Escape') { editingScript = null; render(); }
+      });
+    }
 
     const addBtn = document.getElementById('add-script-btn');
     if (addBtn) {

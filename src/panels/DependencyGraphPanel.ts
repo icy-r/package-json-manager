@@ -95,14 +95,31 @@ export class DependencyGraphPanel {
     });
   }
 
-  private async refreshGraph(): Promise<void> {
+  private getWorkspaceFolder(): vscode.WorkspaceFolder | undefined {
     const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      return;
+    if (editor) {
+      return vscode.workspace.getWorkspaceFolder(editor.document.uri);
     }
 
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    for (const tab of vscode.window.tabGroups.all.flatMap(g => g.tabs)) {
+      if (tab.input && typeof tab.input === 'object' && 'uri' in tab.input) {
+        const uri = (tab.input as { uri: vscode.Uri }).uri;
+        if (uri.fsPath.endsWith('package.json')) {
+          return vscode.workspace.getWorkspaceFolder(uri);
+        }
+      }
+    }
+
+    return vscode.workspace.workspaceFolders?.[0];
+  }
+
+  private async refreshGraph(filterType?: 'all' | 'regular' | 'dev'): Promise<void> {
+    const workspaceFolder = this.getWorkspaceFolder();
     if (!workspaceFolder) {
+      this.panel.webview.postMessage({
+        type: 'error',
+        message: 'No workspace folder found. Open a project first.'
+      });
       return;
     }
 
@@ -112,7 +129,8 @@ export class DependencyGraphPanel {
       const pkgData = this.packageJsonService.parse(pkgContent);
       const graph = await this.dependencyService.generateDependencyGraph(
         workspaceFolder.uri,
-        pkgData
+        pkgData,
+        filterType
       );
       this.panel.webview.postMessage({ type: 'graphData', graph });
     } catch (err) {
@@ -136,26 +154,9 @@ export class DependencyGraphPanel {
           await this.refreshGraph();
           break;
 
-        case 'filterChanged': {
-          const editor = vscode.window.activeTextEditor;
-          if (!editor) {
-            break;
-          }
-          const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
-          if (!workspaceFolder) {
-            break;
-          }
-          const pkgUri = this.fsService.resolveUri(workspaceFolder.uri, 'package.json');
-          const pkgContent = await this.fsService.readFile(pkgUri);
-          const pkgData = this.packageJsonService.parse(pkgContent);
-          const graph = await this.dependencyService.generateDependencyGraph(
-            workspaceFolder.uri,
-            pkgData,
-            msg.filter as 'all' | 'regular' | 'dev'
-          );
-          this.panel.webview.postMessage({ type: 'graphData', graph });
+        case 'filterChanged':
+          await this.refreshGraph(msg.filter as 'all' | 'regular' | 'dev');
           break;
-        }
 
         case 'getPackageDetails': {
           const details = await this.npmService.getPackageDetails(msg.name as string);

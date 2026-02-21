@@ -652,3 +652,52 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(128, 128, 128, 0.3); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.5); }
+
+/* ── Inline Script Editing ── */
+.script-editing {
+  background: var(--list-hover);
+}
+
+.script-edit-input {
+  flex: 1;
+  padding: 5px 8px;
+  background: var(--input-bg);
+  color: var(--input-fg);
+  border: 1px solid var(--input-focus);
+  border-radius: var(--radius);
+  font-family: var(--mono-font);
+  font-size: 0.9em;
+  outline: none;
+}
+
+/* ── Add Custom Field ── */
+.add-field-section { margin-top: 8px; }
+
+.add-field-toggle {
+  cursor: pointer;
+  font-size: 0.85em;
+  opacity: 0.6;
+  padding: 6px 0;
+  list-style: none;
+  user-select: none;
+}
+
+.add-field-toggle:hover { opacity: 0.9; }
+.add-field-toggle::marker { content: ''; }
+.add-field-toggle::before { content: '+ '; }
+
+details[open] .add-field-toggle { opacity: 0.8; }
+details[open] .add-field-toggle::before { content: '− '; }
+
+.add-field-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--list-hover);
+  border-radius: var(--radius);
+}
+
+.add-field-form .form-group { margin-bottom: 0; }
